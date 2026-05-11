@@ -104,8 +104,10 @@ class CategoryMangaListWithQueryAndFilter
             MangaSort.totalChapters => m1.chapters.totalCount
                 .compareTo(m2.chapters.totalCount),
             MangaSort.lastRead =>
-              (m2.lastReadChapter?.lastReadAt ?? 0)
-                  .compareTo(m1.lastReadChapter?.lastReadAt ?? 0),
+              (int.tryParse(m2.lastReadChapter?.lastReadAt ?? '0') ?? 0)
+                  .compareTo(
+                      int.tryParse(m1.lastReadChapter?.lastReadAt ?? '0') ??
+                          0),
           }) *
           sortDirToggle;
     }
