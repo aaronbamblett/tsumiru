@@ -49,7 +49,7 @@ class ServerImage extends HookConsumerWidget {
     final key = useState(UniqueKey());
     // Providers
     final authType = ref.watch(authTypeKeyProvider);
-    final basicToken = ref.watch(credentialsProvider);
+    final basicToken = ref.watch(credentialsProvider).valueOrNull;
 
     final baseApi = "${Endpoints.baseApi(
       baseUrl: ref.watch(serverUrlProvider),

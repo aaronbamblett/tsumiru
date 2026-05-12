@@ -28,7 +28,7 @@ part 'global_providers.g.dart';
 @riverpod
 GraphQLClient graphQlClient(Ref ref) {
   final authType = ref.watch(authTypeKeyProvider) ?? DBKeys.authType.initial;
-  final credentials = ref.watch(credentialsProvider);
+  final credentials = ref.watch(credentialsProvider).valueOrNull;
 
   // Timeout settings
   final timeoutMs = ref.watch(serverRequestTimeoutProvider) ??
@@ -83,7 +83,7 @@ GraphQLClient graphQlClient(Ref ref) {
 @riverpod
 GraphQLClient graphQlSubscriptionClient(Ref ref) {
   final authType = ref.watch(authTypeKeyProvider) ?? DBKeys.authType.initial;
-  final credentials = ref.watch(credentialsProvider);
+  final credentials = ref.watch(credentialsProvider).valueOrNull;
   Link link = WebSocketLink(
       Endpoints.baseApi(
         baseUrl: ref.watch(serverUrlProvider) ?? DBKeys.serverUrl.initial,
