@@ -11,11 +11,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:zoom_view/zoom_view.dart';
 
 import '../../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../../utils/misc/app_utils.dart';
 import '../../../../../../utils/misc/toast/toast.dart';
 import '../../../../../../widgets/server_image.dart';
+import '../../../../../../widgets/zoom/scroll_offset_to_scroll_controller.dart';
 import '../../../../../history/presentation/history_controller.dart';
 import '../../../../../settings/presentation/reader/widgets/reader_infinity_scrolling_mode_tile/reader_infinity_scrolling_mode_tile.dart';
 import '../../../../../settings/presentation/reader/widgets/reader_pinch_to_zoom/reader_pinch_to_zoom.dart';
@@ -74,6 +76,14 @@ class InfinityContinuousReaderMode extends HookConsumerWidget {
         useMemoized(() => ItemScrollController());
     final ItemPositionsListener positionsListener =
         useMemoized(() => ItemPositionsListener.create());
+    final ScrollOffsetController scrollOffsetController =
+        useMemoized(() => ScrollOffsetController());
+    final ScrollController zoomScrollController = useMemoized(
+      () => ScrollOffsetToScrollController(
+        scrollOffsetController: scrollOffsetController,
+      ),
+      [scrollOffsetController],
+    );
 
     final ValueNotifier<int> currentIndex = useState(
       chapter.isRead.ifNull()
@@ -154,14 +164,19 @@ class InfinityContinuousReaderMode extends HookConsumerWidget {
         !kIsWeb &&
                 (Platform.isAndroid || Platform.isIOS) &&
                 isPinchToZoomEnabled
-            ? (Widget child) => InteractiveViewer(
+            ? (Widget child) => ZoomView(
+                  controller: zoomScrollController,
+                  scrollAxis: scrollDirection,
                   maxScale: InfinityContinuousConfig.maxZoomScale,
+                  doubleTapDrag: true,
+                  forceHoldOnPointerDown: true,
                   child: child,
                 )
             : null,
         ScrollablePositionedList.separated(
           itemScrollController: scrollController,
           itemPositionsListener: positionsListener,
+          scrollOffsetController: scrollOffsetController,
           initialScrollIndex: chapter.isRead.ifNull()
               ? 0
               : chapter.lastPageRead.getValueOnNullOrNegative(),
@@ -189,6 +204,14 @@ class InfinityContinuousReaderMode extends HookConsumerWidget {
         useMemoized(() => ItemScrollController());
     final ItemPositionsListener positionsListener =
         useMemoized(() => ItemPositionsListener.create());
+    final ScrollOffsetController scrollOffsetController =
+        useMemoized(() => ScrollOffsetController());
+    final ScrollController zoomScrollController = useMemoized(
+      () => ScrollOffsetToScrollController(
+        scrollOffsetController: scrollOffsetController,
+      ),
+      [scrollOffsetController],
+    );
 
     final ValueNotifier<int> currentIndex = useState(
       chapter.isRead.ifNull()
@@ -369,8 +392,12 @@ class InfinityContinuousReaderMode extends HookConsumerWidget {
         !kIsWeb &&
                 (Platform.isAndroid || Platform.isIOS) &&
                 isPinchToZoomEnabled
-            ? (Widget child) => InteractiveViewer(
+            ? (Widget child) => ZoomView(
+                  controller: zoomScrollController,
+                  scrollAxis: scrollDirection,
                   maxScale: InfinityContinuousConfig.maxZoomScale,
+                  doubleTapDrag: true,
+                  forceHoldOnPointerDown: true,
                   child: child,
                 )
             : null,
@@ -405,6 +432,7 @@ class InfinityContinuousReaderMode extends HookConsumerWidget {
           child: ScrollablePositionedList.separated(
             itemScrollController: scrollController,
             itemPositionsListener: positionsListener,
+            scrollOffsetController: scrollOffsetController,
             physics: const AlwaysScrollableScrollPhysics(),
             initialScrollIndex: chapter.isRead.ifNull()
                 ? 0
