@@ -4,6 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
@@ -49,6 +50,7 @@ class LoginCredentialsPopup extends HookConsumerWidget {
 
     Future<bool> confirmInsecureIfNeeded(String resolvedUrl) async {
       if (!resolvedUrl.startsWith('http://')) return true;
+      if (isLocalAddress(resolvedUrl)) return true;
       final proceed = await showDialog<bool>(
         context: context,
         builder: (dialogCtx) => AlertDialog(
@@ -110,18 +112,7 @@ class LoginCredentialsPopup extends HookConsumerWidget {
           testResultIsError.value = false;
         } else if (result is TestConnectionFailure) {
           testResultIsError.value = true;
-          testResult.value = switch (result.kind) {
-            TestConnectionFailureKind.network =>
-              context.l10n.authTestConnectionFailedNetwork,
-            TestConnectionFailureKind.invalidCredentials =>
-              context.l10n.authTestConnectionFailedAuth,
-            TestConnectionFailureKind.wrongAuthMode =>
-              context.l10n.authTestConnectionFailedMode,
-            TestConnectionFailureKind.unexpectedShape =>
-              context.l10n.authTestConnectionFailedShape,
-            TestConnectionFailureKind.insecureTransport =>
-              context.l10n.authInsecureTransportWarning,
-          };
+          testResult.value = _failureMessage(context, result.kind);
         }
       } finally {
         if (context.mounted) testing.value = false;
@@ -163,7 +154,7 @@ class LoginCredentialsPopup extends HookConsumerWidget {
       } catch (e) {
         if (!context.mounted) return;
         testResultIsError.value = true;
-        testResult.value = e.toString();
+        testResult.value = _failureMessage(context, classifyAuthError(e).kind);
       } finally {
         if (context.mounted) testing.value = false;
       }
@@ -212,12 +203,17 @@ class LoginCredentialsPopup extends HookConsumerWidget {
             ],
             if (testResult.value != null) ...[
               const Gap(8),
-              Text(
-                testResult.value!,
-                style: TextStyle(
-                  color: testResultIsError.value
-                      ? Theme.of(context).colorScheme.error
-                      : Theme.of(context).colorScheme.primary,
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 120),
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    testResult.value!,
+                    style: TextStyle(
+                      color: testResultIsError.value
+                          ? Theme.of(context).colorScheme.error
+                          : Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -243,4 +239,43 @@ class LoginCredentialsPopup extends HookConsumerWidget {
       ],
     );
   }
+}
+
+/// True for LAN-only hosts where plaintext HTTP is the norm: localhost,
+/// 127.x, and RFC1918 IPv4 ranges. We suppress the "Insecure connection"
+/// dialog for these because the warning was meant for the open internet,
+/// not a 192.168.x.x server. Exposed (not _-prefixed) so the test can
+/// exercise the address-matching logic without driving the dialog.
+@visibleForTesting
+bool isLocalAddress(String url) {
+  final host = Uri.tryParse(url)?.host.toLowerCase();
+  if (host == null || host.isEmpty) return false;
+  if (host == 'localhost') return true;
+  final parts = host.split('.');
+  if (parts.length != 4) return false;
+  final octets = parts.map(int.tryParse).toList();
+  if (octets.any((o) => o == null || o < 0 || o > 255)) return false;
+  final a = octets[0]!;
+  final b = octets[1]!;
+  if (a == 127) return true; // 127.0.0.0/8
+  if (a == 10) return true; // 10.0.0.0/8
+  if (a == 192 && b == 168) return true; // 192.168.0.0/16
+  if (a == 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+  return false;
+}
+
+String _failureMessage(BuildContext context, TestConnectionFailureKind kind) {
+  return switch (kind) {
+    TestConnectionFailureKind.network =>
+      context.l10n.authTestConnectionFailedNetwork,
+    TestConnectionFailureKind.tls => context.l10n.authTestConnectionFailedTls,
+    TestConnectionFailureKind.invalidCredentials =>
+      context.l10n.authTestConnectionFailedAuth,
+    TestConnectionFailureKind.wrongAuthMode =>
+      context.l10n.authTestConnectionFailedMode,
+    TestConnectionFailureKind.unexpectedShape =>
+      context.l10n.authTestConnectionFailedShape,
+    TestConnectionFailureKind.insecureTransport =>
+      context.l10n.authInsecureTransportWarning,
+  };
 }

@@ -39,10 +39,50 @@ class TestConnectionFailure extends TestConnectionResult {
 
 enum TestConnectionFailureKind {
   network,
+  tls,
   invalidCredentials,
   wrongAuthMode,
   unexpectedShape,
   insecureTransport,
+}
+
+/// Maps a thrown error to a typed [TestConnectionFailure]. Used by both
+/// `testConnection` and the credentials popup's Save path so both surface
+/// the same friendly message instead of a raw exception toString().
+///
+/// TLS errors (`HandshakeException: Wrong version number`) are checked
+/// BEFORE network errors because their toString() also contains tokens
+/// like "connection" that would otherwise collapse them into a generic
+/// network failure.
+TestConnectionFailure classifyAuthError(Object e) {
+  if (e is SimpleLoginAuthFailure) {
+    return const TestConnectionFailure(
+        TestConnectionFailureKind.invalidCredentials);
+  }
+  if (e is SimpleLoginShapeFailure) {
+    return TestConnectionFailure(
+        TestConnectionFailureKind.unexpectedShape, e.message);
+  }
+  final msg = e.toString().toLowerCase();
+  if (msg.contains('unauthor') || msg.contains('forbidden')) {
+    return const TestConnectionFailure(
+        TestConnectionFailureKind.invalidCredentials);
+  }
+  if (msg.contains('handshake') ||
+      msg.contains('wrong version') ||
+      msg.contains('certificate') ||
+      msg.contains('tls') ||
+      msg.contains(' ssl')) {
+    return const TestConnectionFailure(TestConnectionFailureKind.tls);
+  }
+  if (msg.contains('socket') ||
+      msg.contains('timeout') ||
+      msg.contains('host') ||
+      msg.contains('connection')) {
+    return const TestConnectionFailure(TestConnectionFailureKind.network);
+  }
+  return TestConnectionFailure(
+      TestConnectionFailureKind.unexpectedShape, e.toString());
 }
 
 /// Outcome of a refresh attempt. Top-level sealed type — DECLARED HERE
@@ -353,27 +393,8 @@ class AuthCoordinator extends _$AuthCoordinator {
             TestConnectionFailureKind.unexpectedShape,
             'testConnection only supports simpleLogin or uiLogin');
       }
-    } on SimpleLoginAuthFailure {
-      return const TestConnectionFailure(
-          TestConnectionFailureKind.invalidCredentials);
-    } on SimpleLoginShapeFailure catch (e) {
-      return TestConnectionFailure(
-          TestConnectionFailureKind.unexpectedShape, e.message);
     } catch (e) {
-      final msg = e.toString().toLowerCase();
-      if (msg.contains('unauthor') || msg.contains('forbidden')) {
-        return const TestConnectionFailure(
-            TestConnectionFailureKind.invalidCredentials);
-      }
-      if (msg.contains('socket') ||
-          msg.contains('timeout') ||
-          msg.contains('host') ||
-          msg.contains('connection')) {
-        return const TestConnectionFailure(
-            TestConnectionFailureKind.network);
-      }
-      return TestConnectionFailure(
-          TestConnectionFailureKind.unexpectedShape, e.toString());
+      return classifyAuthError(e);
     }
     return const TestConnectionSuccess();
   }
