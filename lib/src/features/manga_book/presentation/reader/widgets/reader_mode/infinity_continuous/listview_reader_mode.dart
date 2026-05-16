@@ -124,6 +124,14 @@ class ListViewReaderMode extends HookConsumerWidget {
 
     final completedChapterIds = useRef<Set<int>>({});
 
+    // Persistent measured page heights keyed by global index. Every
+    // visibility report contributes here. Used by the slider to compute
+    // accurate scroll-to-target offsets — summing real heights for
+    // already-seen pages, falling back to an average for pages the
+    // user hasn't reached yet. Cleared on prepend because global
+    // indices shift.
+    final measuredHeights = useRef<Map<int, double>>({});
+
     useEffect(() {
       try {
         nextPrevChapterPair.value = ref.read(
@@ -338,6 +346,8 @@ class ListViewReaderMode extends HookConsumerWidget {
         index: globalIndex,
         onReport: (rect) {
           pageRects.value[globalIndex] = rect;
+          final h = rect.bottom - rect.top;
+          if (h > 0) measuredHeights.value[globalIndex] = h;
           updateVisibilityState();
           logViewport();
         },
@@ -375,26 +385,36 @@ class ListViewReaderMode extends HookConsumerWidget {
       );
     }
 
-    // Estimate the pixel offset for a page index by averaging the
-    // measured heights of currently-visible pages, falling back to the
-    // placeholder height ratio when nothing is laid out yet.
+    // Estimate the pixel offset for a page index.
+    //
+    // For pages whose heights we have measured (the user has scrolled
+    // them through the viewport at some point), use the real value.
+    // For pages we haven't seen yet, fall back to the running mean of
+    // measured heights — or, if nothing has been measured, the
+    // placeholder height ratio.
+    //
+    // This converges to exact positioning as the user scrolls through
+    // the chapter. The slider stops fluctuating because the underlying
+    // height map is monotonic-grow, not a rolling window of currently-
+    // visible pages.
     double estimateOffsetForGlobalIndex(int globalIndex) {
       final viewportHeight = MediaQuery.of(context).size.height;
-      double avgPageHeight =
+      final placeholder =
           viewportHeight * InfinityContinuousConfig.verticalPageHeightRatio;
-      if (pageRects.value.isNotEmpty) {
+      final heights = measuredHeights.value;
+      double fallback = placeholder;
+      if (heights.isNotEmpty) {
         double sum = 0;
-        int n = 0;
-        for (final r in pageRects.value.values) {
-          final h = r.bottom - r.top;
-          if (h > 0) {
-            sum += h;
-            n++;
-          }
+        for (final h in heights.values) {
+          sum += h;
         }
-        if (n > 0) avgPageHeight = sum / n;
+        fallback = sum / heights.length;
       }
-      return globalIndex * avgPageHeight;
+      double offset = 0;
+      for (int i = 0; i < globalIndex; i++) {
+        offset += heights[i] ?? fallback;
+      }
+      return offset;
     }
 
     void scrollToGlobalIndex(int globalIndex,
@@ -432,6 +452,12 @@ class ListViewReaderMode extends HookConsumerWidget {
       final position = scrollController.position;
       final estimated = estimateOffsetForGlobalIndex(globalIndex)
           .clamp(position.minScrollExtent, position.maxScrollExtent);
+      // Count how many of the preceding pages have real measurements
+      // vs. fallback so the log shows the estimate's confidence.
+      int measured = 0;
+      for (int i = 0; i < globalIndex; i++) {
+        if (measuredHeights.value.containsKey(i)) measured++;
+      }
       ReaderDebugLog.log('jump_estimated', {
         'source': source ?? 'unknown',
         'global_idx': globalIndex,
@@ -439,6 +465,8 @@ class ListViewReaderMode extends HookConsumerWidget {
         'page_idx': loc.pageIdx,
         'estimated_offset': estimated.round(),
         'max_extent': position.maxScrollExtent.round(),
+        'measured_known': measured,
+        'measured_total': globalIndex,
       });
       scrollController.jumpTo(estimated);
 
@@ -603,6 +631,7 @@ class ListViewReaderMode extends HookConsumerWidget {
             scrollController,
             pageKeys.value,
             pageRects.value,
+            measuredHeights.value,
             context,
           );
         }
@@ -924,6 +953,7 @@ Future<void> _loadPreviousChapter(
   ScrollController scrollController,
   Map<String, GlobalKey> pageKeys,
   Map<int, _PageRect> pageRects,
+  Map<int, double> measuredHeights,
   BuildContext context,
 ) async {
   loadingPrevious.value = true;
@@ -973,8 +1003,10 @@ Future<void> _loadPreviousChapter(
       ...loadedChapters.value,
     ];
     // Indices shifted; drop stale rects so we don't trip visibility
-    // math before the new reports arrive.
+    // math before the new reports arrive. Also drop measuredHeights —
+    // it's keyed by global index, which is no longer valid.
     pageRects.clear();
+    measuredHeights.clear();
 
     if (anchorKey != null) {
       SchedulerBinding.instance.addPostFrameCallback((_) {
