@@ -13,34 +13,33 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:zoom_view/zoom_view.dart';
 
-import 'infinity_continuous/listview_reader_mode.dart';
-
 import '../../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../../utils/misc/app_utils.dart';
-import '../../../../../../utils/misc/toast/toast.dart';
 import '../../../../../../widgets/server_image.dart';
 import '../../../../../../widgets/zoom/scroll_offset_to_scroll_controller.dart';
-import '../../../../../auth/data/auth_credentials_store.dart';
-import '../../../../../history/presentation/history_controller.dart';
 import '../../../../../settings/presentation/reader/widgets/reader_infinity_scrolling_mode_tile/reader_infinity_scrolling_mode_tile.dart';
 import '../../../../../settings/presentation/reader/widgets/reader_pinch_to_zoom/reader_pinch_to_zoom.dart';
 import '../../../../../settings/presentation/reader/widgets/reader_scroll_animation_tile/reader_scroll_animation_tile.dart';
-import '../../../../data/manga_book/manga_book_repository.dart';
 import '../../../../domain/chapter/chapter_model.dart';
-import '../../../../domain/chapter_batch/chapter_batch_model.dart';
 import '../../../../domain/chapter_page/chapter_page_model.dart';
 import '../../../../domain/manga/manga_model.dart';
-import '../../../manga_details/controller/manga_details_controller.dart';
-import '../../controller/reader_controller.dart';
 import '../reader_wrapper.dart';
-import 'infinity_continuous/infinity_continuous_chapter_loader.dart';
 import 'infinity_continuous/infinity_continuous_config.dart';
-import 'infinity_continuous/infinity_continuous_feedback.dart';
 import 'infinity_continuous/infinity_continuous_navigation.dart';
 import 'infinity_continuous/infinity_continuous_utils.dart';
-import 'infinity_continuous/reader_debug_log.dart';
+import 'infinity_continuous/listview_reader_mode.dart';
 
-/// Infinity continuous reader mode with support for multi-chapter loading
+/// Continuous reader mode entry point.
+///
+/// Vertical webtoon mode with infinity scrolling enabled is delegated
+/// to ``ListViewReaderMode`` (plain ``ListView``-based, replaces the
+/// previous SPL implementation that produced backward-bump jumps on
+/// chapter boundary crossings).
+///
+/// Horizontal scroll and "infinity scrolling off" both use the
+/// single-chapter SPL implementation below — that mode never crosses a
+/// chapter boundary inside the reader, so the SPL anchor flip can't
+/// trigger.
 class InfinityContinuousReaderMode extends HookConsumerWidget {
   const InfinityContinuousReaderMode({
     super.key,
@@ -66,15 +65,10 @@ class InfinityContinuousReaderMode extends HookConsumerWidget {
     final infinityScrollingEnabled =
         ref.watch(infinityScrollingModeEnabledProvider).ifNull(false);
 
-    // If continuous reading is disabled, use the normal continuous reader mode
     if (!infinityScrollingEnabled || scrollDirection != Axis.vertical) {
-      return _buildNormalMode(context, ref);
+      return _buildSingleChapterMode(context, ref);
     }
 
-    // Webtoon mode now uses a plain ListView-based reader to bypass the
-    // ScrollablePositionedList anchor-flip bug that produced backward
-    // bumps mid-chapter. Falls back to the SPL implementation if the
-    // experimental flag is disabled.
     return ListViewReaderMode(
       manga: manga,
       chapter: chapter,
@@ -86,8 +80,7 @@ class InfinityContinuousReaderMode extends HookConsumerWidget {
     );
   }
 
-  /// Builds the normal continuous reader mode
-  Widget _buildNormalMode(BuildContext context, WidgetRef ref) {
+  Widget _buildSingleChapterMode(BuildContext context, WidgetRef ref) {
     final ItemScrollController scrollController =
         useMemoized(() => ItemScrollController());
     final ItemPositionsListener positionsListener =
@@ -107,22 +100,17 @@ class InfinityContinuousReaderMode extends HookConsumerWidget {
           : (chapter.lastPageRead).getValueOnNullOrNegative(),
     );
 
-    // Enhanced position tracking that allows UI updates but prevents jumps
     useEffect(() {
       void listener() {
-        final List<ItemPosition> positions =
-            positionsListener.itemPositions.value.toList();
-
+        final positions = positionsListener.itemPositions.value.toList();
         if (positions.isEmpty) return;
 
-        // Find the item that's most visible for display purposes
         ItemPosition? mostVisible;
         double bestVisibleArea = 0.0;
 
-        for (final ItemPosition position in positions) {
-          final double visibleArea =
+        for (final position in positions) {
+          final visibleArea =
               InfinityContinuousUtils.calculateVisibleArea(position);
-
           if (visibleArea > bestVisibleArea &&
               visibleArea > InfinityContinuousConfig.minVisibleAreaThreshold) {
             bestVisibleArea = visibleArea;
@@ -139,12 +127,8 @@ class InfinityContinuousReaderMode extends HookConsumerWidget {
       return () => positionsListener.itemPositions.removeListener(listener);
     }, []);
 
-    // Notify page changes for UI updates
     useEffect(() {
-      final ValueSetter<int>? pageChanged = onPageChanged;
-      if (pageChanged != null) {
-        pageChanged(currentIndex.value);
-      }
+      onPageChanged?.call(currentIndex.value);
       return null;
     }, [currentIndex.value]);
 
@@ -204,8 +188,7 @@ class InfinityContinuousReaderMode extends HookConsumerWidget {
                   InfinityContinuousConfig.verticalCacheMultiplier
               : context.width *
                   InfinityContinuousConfig.horizontalCacheMultiplier,
-          separatorBuilder: (BuildContext context, int index) =>
-              const SizedBox.shrink(),
+          separatorBuilder: (_, __) => const SizedBox.shrink(),
           itemBuilder: (BuildContext context, int index) {
             return _buildPageItem(context, index);
           },
@@ -214,410 +197,16 @@ class InfinityContinuousReaderMode extends HookConsumerWidget {
     );
   }
 
-  /// Builds the continuous reading mode with multi-chapter support
-  Widget _buildContinuousMode(BuildContext context, WidgetRef ref) {
-    final ItemScrollController scrollController =
-        useMemoized(() => ItemScrollController());
-    final ItemPositionsListener positionsListener =
-        useMemoized(() => ItemPositionsListener.create());
-    final ScrollOffsetController scrollOffsetController =
-        useMemoized(() => ScrollOffsetController());
-    final ScrollController zoomScrollController = useMemoized(
-      () => ScrollOffsetToScrollController(
-        scrollOffsetController: scrollOffsetController,
-      ),
-      [scrollOffsetController],
-    );
-
-    final ValueNotifier<int> currentIndex = useState(
-      chapter.isRead.ifNull()
-          ? 0
-          : (chapter.lastPageRead).getValueOnNullOrNegative(),
-    );
-
-    // Track which chapters are loaded with their metadata in order
-    final loadedChapters = useState<
-        List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>>([
-      (pages: chapterPages, chapter: chapter, chapterId: chapter.id),
-    ]);
-
-    // Track chapter loading states
-    final loadingNext = useState(false);
-    final loadingPrevious = useState(false);
-    final hasReachedEnd = useState(false);
-    final hasReachedStart = useState(false);
-
-    // Track the currently visible chapter for UI updates
-    final currentVisibleChapter = useState<ChapterDto>(chapter);
-    final currentChapterPageIndex = useState(
-      chapter.isRead.ifNull()
-          ? 0
-          : (chapter.lastPageRead).getValueOnNullOrNegative(),
-    );
-
-    // Track next/previous chapters dynamically based on current visible chapter
-    final nextPrevChapterPair =
-        useState<({ChapterDto? first, ChapterDto? second})?>(null);
-
-    // Debouncing for user feedback to prevent spam
-    final lastEndFeedbackTime = useRef<DateTime?>(null);
-    final lastStartFeedbackTime = useRef<DateTime?>(null);
-
-    // Debouncing for chapter loading to prevent spam
-    final lastEndScrollTime = useRef<DateTime?>(null);
-    final lastStartScrollTime = useRef<DateTime?>(null);
-
-    // Get next and previous chapters for the currently visible chapter
-    useEffect(() {
-      void updateNextPrevChapters() async {
-        final currentChapterId = currentVisibleChapter.value.id;
-        try {
-          final nextPrevChapters = ref.read(
-            getNextAndPreviousChaptersProvider(
-              mangaId: manga.id,
-              chapterId: currentChapterId,
-            ),
-          );
-          nextPrevChapterPair.value = nextPrevChapters;
-        } catch (e) {
-          nextPrevChapterPair.value = null;
-        }
-      }
-
-      updateNextPrevChapters();
-      return null;
-    }, [currentVisibleChapter.value.id]);
-
-    // Track completed chapters to avoid duplicate API calls
-    final completedChapterIds = useRef<Set<int>>({});
-
-    // Update current index based on scroll position and track chapter completion
-    useEffect(() {
-      // Debug instrumentation: log visible-window changes (sampled to
-      // 200ms cadence) so we can correlate them with bumps.
-      DateTime? lastPosLog;
-      void listener() {
-        final List<ItemPosition> positions =
-            positionsListener.itemPositions.value.toList();
-        if (positions.isEmpty) return;
-
-        // Sampled position log — full firehose would drown the buffer.
-        final now = DateTime.now();
-        if (lastPosLog == null ||
-            now.difference(lastPosLog!) > const Duration(milliseconds: 200)) {
-          lastPosLog = now;
-          final sorted = [...positions]
-            ..sort((a, b) => a.index.compareTo(b.index));
-          final first = sorted.first;
-          final last = sorted.last;
-          ReaderDebugLog.log('viewport', {
-            'first_idx': first.index,
-            'first_lead': first.itemLeadingEdge.toStringAsFixed(3),
-            'last_idx': last.index,
-            'last_trail': last.itemTrailingEdge.toStringAsFixed(3),
-            'count': positions.length,
-            'loaded_chs': loadedChapters.value.length,
-            'cur_idx': currentIndex.value,
-          });
-        }
-
-        // Update current index for UI display and track visible chapter
-        InfinityContinuousUtils.updateCurrentIndexAndChapter(
-          positions,
-          currentIndex,
-          loadedChapters.value,
-          currentVisibleChapter,
-          currentChapterPageIndex,
-          InfinityContinuousConfig.minVisibleAreaThreshold,
-        );
-
-        // Check for completed chapters and mark them as read
-        final completedChapters = InfinityContinuousUtils.getCompletedChapters(
-          positions,
-          loadedChapters.value,
-          InfinityContinuousConfig.minVisibleAreaThreshold,
-        );
-
-        // Mark completed chapters as read (only if not already processed)
-        for (final completedChapter in completedChapters) {
-          if (!completedChapter.isRead &&
-              !completedChapterIds.value.contains(completedChapter.id)) {
-            // Add to processed set to avoid duplicate calls
-            completedChapterIds.value = {
-              ...completedChapterIds.value,
-              completedChapter.id,
-            };
-
-            // Asynchronously mark the chapter as read without blocking the UI
-            AsyncValue.guard(
-              () => ref.read(mangaBookRepositoryProvider).putChapter(
-                    chapterId: completedChapter.id,
-                    patch: ChapterChange(
-                      isRead: true,
-                      lastPageRead: 0, // Reset to 0 when fully read
-                    ),
-                  ),
-            ).then((result) {
-              if (result.hasError && context.mounted) {
-                // Remove from processed set if failed, so we can retry
-                completedChapterIds.value = {...completedChapterIds.value}
-                  ..remove(completedChapter.id);
-                // Optional: Show error toast if chapter marking fails
-                result.showToastOnError(ref.read(toastProvider));
-              } else {
-                // Invalidate relevant providers to refresh UI
-                ref.invalidate(chapterProvider(chapterId: completedChapter.id));
-                ref.invalidate(mangaChapterListProvider(mangaId: manga.id));
-                ref.invalidate(readingHistoryProvider);
-              }
-            });
-          }
-        }
-      }
-
-      positionsListener.itemPositions.addListener(listener);
-      return () => positionsListener.itemPositions.removeListener(listener);
-    }, []);
-
-    // Notify page changes for UI updates
-    useEffect(() {
-      final ValueSetter<int>? pageChanged = onPageChanged;
-      if (pageChanged != null) {
-        // Use the chapter-relative page index for callback
-        pageChanged(currentChapterPageIndex.value);
-      }
-      return null;
-    }, [currentChapterPageIndex.value]);
-
-    // Debug instrumentation: log auth-credential changes (token
-    // rotations) so we can correlate them with viewport jumps. If a
-    // token rotation lines up with a viewport bump in the same frame,
-    // the proactive refresh path is causing the reader to re-anchor.
-    ref.listen(authCredentialsStoreProvider, (prev, next) {
-      final prevState = prev?.valueOrNull;
-      final nextState = next.valueOrNull;
-      if (prevState == null || nextState == null) return;
-      // Detect access-token rotation specifically (string → different string).
-      if (prevState.uiAccessToken != null &&
-          nextState.uiAccessToken != null &&
-          prevState.uiAccessToken != nextState.uiAccessToken) {
-        ReaderDebugLog.log('ui_token_rotated', {
-          'prev_exp':
-              prevState.uiAccessTokenExpiresAt?.toIso8601String() ?? 'null',
-          'new_exp':
-              nextState.uiAccessTokenExpiresAt?.toIso8601String() ?? 'null',
-          'loaded_chs': loadedChapters.value.length,
-          'cur_idx': currentIndex.value,
-        });
-      } else if (prevState.uiAccessToken != nextState.uiAccessToken) {
-        ReaderDebugLog.log('ui_token_changed', {
-          'from': prevState.uiAccessToken == null ? 'null' : 'present',
-          'to': nextState.uiAccessToken == null ? 'null' : 'present',
-        });
-      }
-    });
-
-    // Debug instrumentation: log every time the loaded-chapters list
-    // mutates so we can correlate prepends/appends with reader bumps.
-    final lastLoggedChapterIds = useRef<List<int>?>(null);
-    useEffect(() {
-      final newIds = [for (final c in loadedChapters.value) c.chapterId];
-      final old = lastLoggedChapterIds.value;
-      lastLoggedChapterIds.value = newIds;
-      if (old == null) {
-        ReaderDebugLog.log('loaded_chapters_init', {
-          'ids': newIds.join(','),
-          'count': newIds.length,
-        });
-      } else {
-        // Diff: prepend = new ids at start, append = new ids at end.
-        final operation = (newIds.length > old.length)
-            ? (newIds.last != old.last ? 'append' : 'prepend')
-            : (newIds.length < old.length ? 'shrink' : 'reorder');
-        ReaderDebugLog.log('loaded_chapters_changed', {
-          'op': operation,
-          'old_ids': old.join(','),
-          'new_ids': newIds.join(','),
-          'cur_idx': currentIndex.value,
-          'visible_ch': currentVisibleChapter.value.id,
-        });
-      }
-      return null;
-    }, [loadedChapters.value]);
-
-    final bool isAnimationEnabled =
-        ref.read(readerScrollAnimationProvider).ifNull(true);
-    final bool isPinchToZoomEnabled =
-        ref.read(pinchToZoomProvider).ifNull(true);
-
-    return Stack(children: [
-      ReaderWrapper(
-      scrollDirection: scrollDirection,
-      chapterPages: InfinityContinuousUtils.createChapterPagesDto(
-          loadedChapters.value, currentVisibleChapter.value, chapterPages),
-      chapter: currentVisibleChapter.value,
-      manga: manga,
-      showReaderLayoutAnimation: showReaderLayoutAnimation,
-      currentIndex: currentChapterPageIndex.value,
-      onChanged: (index) {
-        // Convert chapter-relative index to global index and scroll
-        final globalIndex =
-            InfinityContinuousUtils.convertChapterIndexToGlobalIndex(
-          index,
-          loadedChapters.value,
-          currentVisibleChapter.value.id,
-        );
-        if (globalIndex >= 0) {
-          currentIndex.value = globalIndex;
-          ReaderDebugLog.log('slider_jumpTo', {
-            'global_idx': globalIndex,
-            'chapter_idx': index,
-            'visible_ch': currentVisibleChapter.value.id,
-          });
-          scrollController.jumpTo(index: globalIndex);
-        }
-      },
-      onPrevious: () => InfinityContinuousNavigation.handleNavigation(
-        scrollController,
-        positionsListener,
-        isAnimationEnabled,
-        isNext: false,
-      ),
-      onNext: () => InfinityContinuousNavigation.handleNavigation(
-        scrollController,
-        positionsListener,
-        isAnimationEnabled,
-        isNext: true,
-      ),
-      child: AppUtils.wrapOn(
-        !kIsWeb &&
-                (Platform.isAndroid || Platform.isIOS) &&
-                isPinchToZoomEnabled
-            ? (Widget child) => ZoomView(
-                  controller: zoomScrollController,
-                  scrollAxis: scrollDirection,
-                  maxScale: InfinityContinuousConfig.maxZoomScale,
-                  doubleTapDrag: true,
-                  forceHoldOnPointerDown: true,
-                  child: child,
-                )
-            : null,
-        NotificationListener<ScrollNotification>(
-          onNotification: (ScrollNotification notification) {
-            // Custom overscroll detection based on Stack Overflow solution
-            // https://stackoverflow.com/questions/67091643/check-for-overscroll-in-pageview-flutter
-            if (notification is ScrollUpdateNotification) {
-              // Debounce scroll handling to prevent rapid-fire events during chapter loading
-              if (!loadingNext.value && !loadingPrevious.value) {
-                _handleCustomOverscroll(
-                  notification,
-                  ref,
-                  context,
-                  nextPrevChapterPair.value,
-                  loadedChapters,
-                  loadingNext,
-                  loadingPrevious,
-                  hasReachedEnd,
-                  hasReachedStart,
-                  lastEndFeedbackTime,
-                  lastStartFeedbackTime,
-                  lastEndScrollTime,
-                  lastStartScrollTime,
-                  scrollController,
-                  positionsListener,
-                );
-              }
-            }
-            return false;
-          },
-          child: ScrollablePositionedList.separated(
-            itemScrollController: scrollController,
-            itemPositionsListener: positionsListener,
-            scrollOffsetController: scrollOffsetController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            initialScrollIndex: chapter.isRead.ifNull()
-                ? 0
-                : chapter.lastPageRead.getValueOnNullOrNegative(),
-            scrollDirection: scrollDirection,
-            reverse: reverse,
-            itemCount:
-                InfinityContinuousUtils.getTotalPages(loadedChapters.value),
-            minCacheExtent: context.height *
-                InfinityContinuousConfig.verticalCacheMultiplier,
-            separatorBuilder: (BuildContext context, int index) =>
-                _buildSeparator(context, index, loadedChapters.value),
-            itemBuilder: (BuildContext context, int index) {
-              return _buildContinuousPageItem(
-                context,
-                index,
-                loadedChapters.value,
-                loadingNext.value,
-                loadingPrevious.value,
-                hasReachedEnd.value,
-                hasReachedStart.value,
-              );
-            },
-          ),
-        ),
-      ),
-    ),
-      // Diagnostic overlay: red BUMP marker button. Tap when the
-      // reader jumps you backward — the log gets a USER_MARK and the
-      // last ~2000 events are copied to clipboard so you can paste
-      // them. Only present on debug/reader-* branches.
-      Positioned(
-        right: 12,
-        bottom: 96,
-        child: SafeArea(
-          child: Material(
-            color: Colors.transparent,
-            child: GestureDetector(
-              onTap: () async {
-                ReaderDebugLog.mark('BUMP_REPORTED');
-                await ReaderDebugLog.flushToClipboard();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Reader log copied to clipboard'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.85),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Text(
-                  'BUMP',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ]);
-  }
-
-  /// Builds a page item for normal mode
   Widget _buildPageItem(BuildContext context, int index) {
-    final Widget image = ServerImage(
+    return ServerImage(
       showReloadButton: true,
-      fit:
-          scrollDirection == Axis.vertical ? BoxFit.fitWidth : BoxFit.fitHeight,
+      fit: scrollDirection == Axis.vertical
+          ? BoxFit.fitWidth
+          : BoxFit.fitHeight,
       appendApiToUrl: false,
       imageUrl: chapterPages.pages[index],
       progressIndicatorBuilder: (_, __, downloadProgress) => Center(
-        child: CircularProgressIndicator(
-          value: downloadProgress.progress,
-        ),
+        child: CircularProgressIndicator(value: downloadProgress.progress),
       ),
       wrapper: (Widget child) => SizedBox(
         height: scrollDirection == Axis.vertical
@@ -628,230 +217,6 @@ class InfinityContinuousReaderMode extends HookConsumerWidget {
             : null,
         child: child,
       ),
-    );
-
-    return image;
-  }
-
-  /// Builds a page item for continuous mode
-  Widget _buildContinuousPageItem(
-    BuildContext context,
-    int index,
-    List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>
-        loadedChapters,
-    bool loadingNext,
-    bool loadingPrevious,
-    bool hasReachedEnd,
-    bool hasReachedStart,
-  ) {
-    final chapterInfo =
-        InfinityContinuousUtils.getChapterInfoForIndex(index, loadedChapters);
-    if (chapterInfo == null) {
-      return const SizedBox(
-          height: 100, child: Center(child: CircularProgressIndicator()));
-    }
-
-    final Widget image = ServerImage(
-      showReloadButton: true,
-      fit: BoxFit.fitWidth,
-      appendApiToUrl: false,
-      imageUrl: chapterInfo.page,
-      progressIndicatorBuilder: (_, __, downloadProgress) => Center(
-        child: CircularProgressIndicator(
-          value: downloadProgress.progress,
-        ),
-      ),
-      wrapper: (Widget child) => SizedBox(
-        height:
-            context.height * InfinityContinuousConfig.verticalPageHeightRatio,
-        child: child,
-      ),
-    );
-
-    return image;
-  }
-
-  /// Handles scroll updates to detect boundary scroll attempts
-  /// Since ScrollablePositionedList doesn't generate OverscrollNotification,
-  /// we need to detect when user is trying to scroll beyond boundaries
-  /// Custom overscroll detection for ScrollablePositionedList
-  /// Based on Stack Overflow solution: https://stackoverflow.com/questions/67091643/check-for-overscroll-in-pageview-flutter
-  /// Detects when user tries to scroll beyond boundaries by monitoring scroll metrics
-  void _handleCustomOverscroll(
-    ScrollUpdateNotification notification,
-    WidgetRef ref,
-    BuildContext context,
-    ({ChapterDto? first, ChapterDto? second})? nextPrevChapterPair,
-    ValueNotifier<
-            List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>>
-        loadedChapters,
-    ValueNotifier<bool> loadingNext,
-    ValueNotifier<bool> loadingPrevious,
-    ValueNotifier<bool> hasReachedEnd,
-    ValueNotifier<bool> hasReachedStart,
-    ObjectRef<DateTime?> lastEndFeedbackTime,
-    ObjectRef<DateTime?> lastStartFeedbackTime,
-    ObjectRef<DateTime?> lastEndScrollTime,
-    ObjectRef<DateTime?> lastStartScrollTime,
-    ItemScrollController scrollController,
-    ItemPositionsListener positionsListener,
-  ) {
-    final positions = positionsListener.itemPositions.value.toList();
-    if (positions.isEmpty) return;
-
-    final maxIndex =
-        InfinityContinuousUtils.getTotalPages(loadedChapters.value) - 1;
-    final lastVisibleIndex =
-        positions.map((p) => p.index).reduce((a, b) => a > b ? a : b);
-    final firstVisibleIndex =
-        positions.map((p) => p.index).reduce((a, b) => a < b ? a : b);
-
-    final metrics = notification.metrics;
-    final now = DateTime.now();
-    const scrollCooldown = InfinityContinuousConfig.chapterLoadCooldown;
-
-    // Define scroll direction variables
-    final tryingToScrollDown =
-        notification.scrollDelta != null && notification.scrollDelta! > 0;
-    final tryingToScrollUp =
-        notification.scrollDelta != null && notification.scrollDelta! < 0;
-
-    // Enhanced overscroll detection with better stability
-    // Use more conservative thresholds to prevent false triggers during chapter loading
-    final scrollDelta = notification.scrollDelta ?? 0.0;
-    final isSignificantScroll =
-        scrollDelta.abs() > 2.0; // Ignore tiny scroll movements
-
-    final overscrollEnd = (metrics.pixels >
-            metrics.maxScrollExtent +
-                InfinityContinuousConfig.scrollExtentTolerance) ||
-        (metrics.atEdge &&
-            lastVisibleIndex >= maxIndex &&
-            tryingToScrollDown &&
-            isSignificantScroll);
-    final atMaxScrollExtent = (metrics.pixels - metrics.maxScrollExtent).abs() <
-        InfinityContinuousConfig.scrollExtentTolerance;
-
-    final overscrollStart = (metrics.pixels <
-            metrics.minScrollExtent -
-                InfinityContinuousConfig.scrollExtentTolerance) ||
-        (metrics.atEdge &&
-            firstVisibleIndex <= 0 &&
-            tryingToScrollUp &&
-            isSignificantScroll);
-    final atMinScrollExtent = (metrics.pixels - metrics.minScrollExtent).abs() <
-        InfinityContinuousConfig.scrollExtentTolerance;
-
-    // Trigger next chapter loading on overscroll at end
-    if ((overscrollEnd ||
-            (atMaxScrollExtent &&
-                tryingToScrollDown &&
-                lastVisibleIndex >= maxIndex)) &&
-        !loadingNext.value &&
-        !hasReachedEnd.value &&
-        nextPrevChapterPair?.first != null) {
-      if (lastEndScrollTime.value == null ||
-          now.difference(lastEndScrollTime.value!) > scrollCooldown) {
-        final nextChapter = nextPrevChapterPair!.first!;
-
-        lastEndScrollTime.value = now;
-        InfinityContinuousChapterLoader.loadNextChapter(
-          ref,
-          nextChapter,
-          loadedChapters,
-          loadingNext,
-          hasReachedEnd,
-          context,
-        );
-      }
-    }
-
-    // Trigger previous chapter loading on overscroll at start
-    // Add additional stability check to prevent loading during scroll transitions
-    if ((overscrollStart ||
-            (atMinScrollExtent &&
-                tryingToScrollUp &&
-                firstVisibleIndex <= 0)) &&
-        !loadingPrevious.value &&
-        !hasReachedStart.value &&
-        nextPrevChapterPair?.second != null) {
-      if (lastStartScrollTime.value == null ||
-          now.difference(lastStartScrollTime.value!) > scrollCooldown) {
-        // Additional stability check: ensure we're not in the middle of a scroll transition
-        final positions = positionsListener.itemPositions.value.toList();
-        final isStable = positions.isEmpty ||
-            InfinityContinuousUtils.isScrollPositionStable(
-                positions, InfinityContinuousConfig.minVisibleAreaThreshold);
-
-        if (isStable) {
-          final previousChapter = nextPrevChapterPair!.second!;
-
-          lastStartScrollTime.value = now;
-          InfinityContinuousChapterLoader.loadPreviousChapter(
-            ref,
-            previousChapter,
-            loadedChapters,
-            loadingPrevious,
-            hasReachedStart,
-            scrollController,
-            positionsListener,
-            context,
-          );
-        }
-      }
-    }
-
-    // Show user feedback when trying to scroll past the last chapter
-    if ((overscrollEnd ||
-            (atMaxScrollExtent &&
-                tryingToScrollDown &&
-                lastVisibleIndex >= maxIndex)) &&
-        !loadingNext.value &&
-        (nextPrevChapterPair?.first == null || hasReachedEnd.value)) {
-      InfinityContinuousFeedback.showEndOfMangaFeedback(
-          context, lastEndFeedbackTime);
-    }
-
-    // Show user feedback when trying to scroll past the first chapter
-    if ((overscrollStart ||
-            (atMinScrollExtent &&
-                tryingToScrollUp &&
-                firstVisibleIndex <= 0)) &&
-        !loadingPrevious.value &&
-        (nextPrevChapterPair?.second == null || hasReachedStart.value)) {
-      InfinityContinuousFeedback.showStartOfMangaFeedback(
-          context, lastStartFeedbackTime);
-    }
-  }
-
-  /// Builds separator for continuous mode
-  Widget _buildSeparator(
-      BuildContext context,
-      int index,
-      List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>
-          loadedChapters) {
-    final isChapterBoundary =
-        InfinityContinuousUtils.isChapterBoundary(index, loadedChapters);
-
-    if (!isChapterBoundary) {
-      return const SizedBox
-          .shrink(); // No separator for pages within the same chapter
-    }
-
-    // Double-check: ensure we have multiple chapters loaded before showing separator
-    if (loadedChapters.length <= 1) {
-      return const SizedBox
-          .shrink(); // Don't show separator if only one chapter is loaded
-    }
-
-    // Determine if this is a chapter start or end
-    final separatorInfo = InfinityContinuousChapterSeparator.getSeparatorInfo(
-        index, loadedChapters);
-    if (separatorInfo == null) return const SizedBox.shrink();
-
-    return InfinityContinuousChapterSeparator(
-      chapterName: separatorInfo.chapterName,
-      isChapterStart: separatorInfo.isChapterStart,
     );
   }
 }

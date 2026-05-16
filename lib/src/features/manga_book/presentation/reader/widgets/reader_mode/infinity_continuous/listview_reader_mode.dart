@@ -34,34 +34,27 @@ import 'reader_debug_log.dart';
 
 /// Webtoon reader built on a plain ``ListView.separated`` + ``ScrollController``.
 ///
-/// Background: the original implementation used
-/// ``ScrollablePositionedList.separated`` which maintains internal
-/// primary/secondary anchor indices. When the user backward-scrolls
-/// across a page boundary, SPL flips its primary anchor between
-/// items, and if the next item's height estimate differs from its
-/// rendered height, the flip lands at a different offset — the user
-/// experiences a sudden backward "snap" of one to several pages.
-/// Hardware-reproduced by the reporter on 2026-05-16 (see debug logs
-/// linked in the implementation plan).
+/// Why not ``ScrollablePositionedList``: SPL maintains internal
+/// primary/secondary anchor indices. When the user back-scrolls across
+/// a page boundary, SPL flips its primary anchor between items; if the
+/// next item's height estimate differs from its rendered height, the
+/// flip lands at a different offset and the user sees a sudden backward
+/// "snap" of one or more pages. Reproduced on hardware on 2026-05-16.
+/// Plain ``ListView`` has no primary-target machinery: scroll position
+/// is one absolute pixel offset and layout changes above the viewport
+/// don't reanchor it.
 ///
-/// This implementation uses a plain ``ListView`` which has no
-/// primary-target machinery. Scroll position is a single absolute
-/// pixel offset; layout changes above the viewport don't reanchor it.
-///
-/// Behavior the SPL version had that's preserved here:
-///   * Initial scroll to ``chapter.lastPageRead`` via post-frame
-///     ``Scrollable.ensureVisible`` against per-page ``GlobalKey``s.
-///   * Slider/tap-zone jumpTo a specific chapter-relative page index.
-///   * Overscroll detection that loads the next/previous chapter.
-///   * Mark-as-read when a chapter is fully scrolled past.
-///   * Chapter separators between adjacent loaded chapters.
-///   * Pinch-to-zoom integration (via the parent reader wrapper).
-///
-/// Behavior changed:
-///   * Page-visibility tracking is derived from each page widget
-///     reporting its on-screen rectangle through a callback, rather
-///     than from ``ItemPositionsListener``. Slightly higher per-frame
-///     cost; semantically equivalent.
+/// Multi-chapter prepend (back-loading the previous chapter) needs care
+/// even with ListView: inserting items at the top pushes existing
+/// content down by the prepended height, which the user would see as a
+/// jump. The fix used here is to pick an "anchor" page that is already
+/// on screen, store its current viewport-relative top, prepend the
+/// chapter, and on the next frame measure where that same widget now
+/// sits and re-set the scroll offset so it lands at the same place.
+/// Per-page ``GlobalKey``s are stable across prepends because they are
+/// keyed by ``(chapterId, pageIdxInChapter)`` rather than by global
+/// index, so the anchor widget's RenderBox stays attached through the
+/// rebuild and ``localToGlobal`` returns a valid position.
 class ListViewReaderMode extends HookConsumerWidget {
   const ListViewReaderMode({
     super.key,
@@ -85,10 +78,12 @@ class ListViewReaderMode extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scrollController = useScrollController();
-    // Per-page GlobalKeys, keyed by GLOBAL page index. Used by
-    // Scrollable.ensureVisible for slider-driven jumps + initial
-    // scroll-to-lastPageRead.
-    final pageKeys = useRef<Map<int, GlobalKey>>({});
+
+    // Keyed by "chapterId:pageIdxInChapter". Stable across prepends —
+    // the same widget keeps the same key even when its global index
+    // shifts, so ``key.currentContext`` keeps pointing at the same
+    // RenderBox.
+    final pageKeys = useRef<Map<String, GlobalKey>>({});
 
     final ValueNotifier<int> currentIndex = useState(
       chapter.isRead.ifNull()
@@ -96,19 +91,16 @@ class ListViewReaderMode extends HookConsumerWidget {
           : (chapter.lastPageRead).getValueOnNullOrNegative(),
     );
 
-    // Track which chapters are loaded with their metadata in order.
     final loadedChapters = useState<
         List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>>([
       (pages: chapterPages, chapter: chapter, chapterId: chapter.id),
     ]);
 
-    // Track chapter loading states.
     final loadingNext = useState(false);
     final loadingPrevious = useState(false);
     final hasReachedEnd = useState(false);
     final hasReachedStart = useState(false);
 
-    // Track the currently visible chapter for UI updates.
     final currentVisibleChapter = useState<ChapterDto>(chapter);
     final currentChapterPageIndex = useState(
       chapter.isRead.ifNull()
@@ -116,82 +108,62 @@ class ListViewReaderMode extends HookConsumerWidget {
           : (chapter.lastPageRead).getValueOnNullOrNegative(),
     );
 
-    // Track next/previous chapters dynamically based on current visible chapter.
     final nextPrevChapterPair =
         useState<({ChapterDto? first, ChapterDto? second})?>(null);
 
-    // Debouncing.
     final lastEndFeedbackTime = useRef<DateTime?>(null);
     final lastStartFeedbackTime = useRef<DateTime?>(null);
     final lastEndScrollTime = useRef<DateTime?>(null);
     final lastStartScrollTime = useRef<DateTime?>(null);
 
-    // Latest reported visibility info from each rendered page, keyed by
-    // global page index. Updated by per-page ``_VisibilityReporter``
-    // widgets on layout. Used to derive currentIndex /
-    // currentVisibleChapter / mark-as-read.
+    // Per-page viewport rectangles reported by ``_VisibilityReporter``.
+    // Keyed by global index for visibility calculations. Cleared on
+    // prepend because global indices shift; new rects arrive next frame.
     final pageRects = useRef<Map<int, _PageRect>>({});
 
-    // Track completed chapters to avoid duplicate API calls.
     final completedChapterIds = useRef<Set<int>>({});
 
-    // Get next and previous chapters for the currently visible chapter.
     useEffect(() {
-      void updateNextPrevChapters() {
-        final currentChapterId = currentVisibleChapter.value.id;
-        try {
-          final nextPrevChapters = ref.read(
-            getNextAndPreviousChaptersProvider(
-              mangaId: manga.id,
-              chapterId: currentChapterId,
-            ),
-          );
-          nextPrevChapterPair.value = nextPrevChapters;
-        } catch (e) {
-          nextPrevChapterPair.value = null;
-        }
+      try {
+        nextPrevChapterPair.value = ref.read(
+          getNextAndPreviousChaptersProvider(
+            mangaId: manga.id,
+            chapterId: currentVisibleChapter.value.id,
+          ),
+        );
+      } catch (_) {
+        nextPrevChapterPair.value = null;
       }
-
-      updateNextPrevChapters();
       return null;
     }, [currentVisibleChapter.value.id]);
 
-    // Initial scroll to lastPageRead, after first frame.
+    // Initial scroll to lastPageRead via per-page GlobalKey.
     useEffect(() {
-      void scheduleScroll() {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          final targetIdx = chapter.isRead.ifNull()
-              ? 0
-              : chapter.lastPageRead.getValueOnNullOrNegative();
-          if (targetIdx == 0) return;
-          final key = pageKeys.value[targetIdx];
-          final ctx = key?.currentContext;
-          if (ctx != null) {
-            Scrollable.ensureVisible(
-              ctx,
-              alignment: 0.0,
-              duration: Duration.zero,
-            );
-          } else {
-            // Target page hasn't been built yet (off-screen). Try the
-            // raw offset estimate.
-            // Fallback: just stay at top; will work itself out as user
-            // scrolls. Don't risk a wrong jump.
-          }
-        });
-      }
-
-      scheduleScroll();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final targetIdx = chapter.isRead.ifNull()
+            ? 0
+            : chapter.lastPageRead.getValueOnNullOrNegative();
+        if (targetIdx == 0) return;
+        final key = pageKeys.value[_pageKeyId(chapter.id, targetIdx)];
+        final ctx = key?.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            alignment: 0.0,
+            duration: Duration.zero,
+          );
+        }
+      });
       return null;
     }, [chapter.id]);
 
-    // Notify page changes for UI updates.
     useEffect(() {
       onPageChanged?.call(currentChapterPageIndex.value);
       return null;
     }, [currentChapterPageIndex.value]);
 
-    // Debug instrumentation: log loaded-chapter list mutations.
+    // Debug: log loaded-chapter list mutations so a future reproducer
+    // log shows the prepend/append timestamps for correlation.
     final lastLoggedChapterIds = useRef<List<int>?>(null);
     useEffect(() {
       final newIds = [for (final c in loadedChapters.value) c.chapterId];
@@ -203,11 +175,11 @@ class ListViewReaderMode extends HookConsumerWidget {
           'count': newIds.length,
         });
       } else {
-        final operation = (newIds.length > old.length)
+        final op = (newIds.length > old.length)
             ? (newIds.last != old.last ? 'append' : 'prepend')
             : (newIds.length < old.length ? 'shrink' : 'reorder');
         ReaderDebugLog.log('loaded_chapters_changed', {
-          'op': operation,
+          'op': op,
           'old_ids': old.join(','),
           'new_ids': newIds.join(','),
           'cur_idx': currentIndex.value,
@@ -222,18 +194,14 @@ class ListViewReaderMode extends HookConsumerWidget {
     final bool isPinchToZoomEnabled =
         ref.read(pinchToZoomProvider).ifNull(true);
 
-    // ---- Helpers ---------------------------------------------------
-
     void updateVisibilityState() {
-      // Build a sorted snapshot of currently-rendered page rectangles.
       final rects = pageRects.value.entries.toList()
         ..sort((a, b) => a.key.compareTo(b.key));
       if (rects.isEmpty) return;
 
-      // Translate _PageRect into the InfinityContinuousUtils-friendly
-      // ItemPosition shape so existing util functions keep working.
       final viewportHeight = MediaQuery.of(context).size.height;
       if (viewportHeight <= 0) return;
+
       final positions = <_FakeItemPosition>[
         for (final entry in rects)
           if (entry.value.bottom > 0 && entry.value.top < viewportHeight)
@@ -245,65 +213,54 @@ class ListViewReaderMode extends HookConsumerWidget {
       ];
       if (positions.isEmpty) return;
 
-      // Find the most-visible page for currentIndex.
       _FakeItemPosition? mostVisible;
       double bestArea = 0;
       for (final p in positions) {
-        final area = (p.itemTrailingEdge.clamp(0.0, 1.0)) -
-            (p.itemLeadingEdge.clamp(0.0, 1.0));
+        final area = p.itemTrailingEdge.clamp(0.0, 1.0) -
+            p.itemLeadingEdge.clamp(0.0, 1.0);
         if (area > bestArea &&
             area > InfinityContinuousConfig.minVisibleAreaThreshold) {
           bestArea = area;
           mostVisible = p;
         }
       }
-      if (mostVisible != null) {
-        if (currentIndex.value != mostVisible.index) {
-          currentIndex.value = mostVisible.index;
-        }
-        // Update which chapter is currently visible + chapter-relative idx.
-        final globalIdx = mostVisible.index;
-        final chapters = loadedChapters.value;
-        int cumulative = 0;
-        for (final ch in chapters) {
-          final pageCount = ch.pages.pages.length;
-          if (globalIdx >= cumulative && globalIdx < cumulative + pageCount) {
-            if (currentVisibleChapter.value.id != ch.chapter.id) {
-              currentVisibleChapter.value = ch.chapter;
-            }
-            final chapterRelative = globalIdx - cumulative;
-            if (currentChapterPageIndex.value != chapterRelative) {
-              currentChapterPageIndex.value = chapterRelative;
-            }
-            break;
-          }
-          cumulative += pageCount;
-        }
-      }
+      if (mostVisible == null) return;
 
-      // Mark completed chapters as read.
-      final viewportFraction = 1.0;
-      final completed = <ChapterDto>[];
+      if (currentIndex.value != mostVisible.index) {
+        currentIndex.value = mostVisible.index;
+      }
+      final globalIdx = mostVisible.index;
       int cumulative = 0;
       for (final ch in loadedChapters.value) {
         final pageCount = ch.pages.pages.length;
+        if (globalIdx >= cumulative && globalIdx < cumulative + pageCount) {
+          if (currentVisibleChapter.value.id != ch.chapter.id) {
+            currentVisibleChapter.value = ch.chapter;
+          }
+          final chapterRelative = globalIdx - cumulative;
+          if (currentChapterPageIndex.value != chapterRelative) {
+            currentChapterPageIndex.value = chapterRelative;
+          }
+          break;
+        }
+        cumulative += pageCount;
+      }
+
+      // Mark fully-scrolled-past chapters as read.
+      cumulative = 0;
+      final completed = <ChapterDto>[];
+      for (final ch in loadedChapters.value) {
+        final pageCount = ch.pages.pages.length;
         final lastIdx = cumulative + pageCount - 1;
-        // Chapter is "completed" if all its pages have been scrolled
-        // PAST (no page visible AND the LAST page's bottom is above
-        // viewport top).
         bool anyVisible = false;
-        bool lastScrolledPast = false;
         for (final p in positions) {
           if (p.index >= cumulative && p.index <= lastIdx) {
             anyVisible = true;
             break;
           }
         }
-        // Check if last page's rect bottom is <0 (above viewport).
         final lastRect = pageRects.value[lastIdx];
-        if (lastRect != null && lastRect.bottom <= 0) {
-          lastScrolledPast = true;
-        }
+        final lastScrolledPast = lastRect != null && lastRect.bottom <= 0;
         if (!anyVisible && lastScrolledPast && !ch.chapter.isRead.ifNull()) {
           completed.add(ch.chapter);
         }
@@ -329,12 +286,8 @@ class ListViewReaderMode extends HookConsumerWidget {
           }
         });
       }
-      // Silence unused warning for viewportFraction.
-      // ignore: unused_local_variable
-      final _ = viewportFraction;
     }
 
-    // Sampled debug logger for viewport state.
     final lastPosLog = useRef<DateTime?>(null);
     void logViewport() {
       final now = DateTime.now();
@@ -347,8 +300,7 @@ class ListViewReaderMode extends HookConsumerWidget {
       final viewportHeight = MediaQuery.of(context).size.height;
       if (viewportHeight <= 0) return;
       final rects = pageRects.value.entries
-          .where(
-              (e) => e.value.bottom > 0 && e.value.top < viewportHeight)
+          .where((e) => e.value.bottom > 0 && e.value.top < viewportHeight)
           .toList()
         ..sort((a, b) => a.key.compareTo(b.key));
       if (rects.isEmpty) return;
@@ -356,11 +308,9 @@ class ListViewReaderMode extends HookConsumerWidget {
       final last = rects.last;
       ReaderDebugLog.log('viewport', {
         'first_idx': first.key,
-        'first_lead':
-            (first.value.top / viewportHeight).toStringAsFixed(3),
+        'first_lead': (first.value.top / viewportHeight).toStringAsFixed(3),
         'last_idx': last.key,
-        'last_trail':
-            (last.value.bottom / viewportHeight).toStringAsFixed(3),
+        'last_trail': (last.value.bottom / viewportHeight).toStringAsFixed(3),
         'count': rects.length,
         'loaded_chs': loadedChapters.value.length,
         'cur_idx': currentIndex.value,
@@ -369,23 +319,19 @@ class ListViewReaderMode extends HookConsumerWidget {
       });
     }
 
-    // ---- Page item builders ---------------------------------------
-
-    final totalPages = InfinityContinuousUtils.getTotalPages(loadedChapters.value);
+    final totalPages =
+        InfinityContinuousUtils.getTotalPages(loadedChapters.value);
 
     Widget buildPage(BuildContext context, int globalIndex) {
-      final key = pageKeys.value[globalIndex] ??= GlobalKey();
-      final image = _findImageUrlForGlobalIndex(
-        globalIndex,
-        loadedChapters.value,
-      );
-      if (image == null) {
+      final loc = _locateGlobalIndex(globalIndex, loadedChapters.value);
+      if (loc == null) {
         return SizedBox(
-          key: key,
           height: MediaQuery.of(context).size.height *
               InfinityContinuousConfig.verticalPageHeightRatio,
         );
       }
+      final keyId = _pageKeyId(loc.chapterId, loc.pageIdx);
+      final key = pageKeys.value[keyId] ??= GlobalKey();
       return _VisibilityReporter(
         key: key,
         index: globalIndex,
@@ -401,7 +347,7 @@ class ListViewReaderMode extends HookConsumerWidget {
           showReloadButton: true,
           fit: BoxFit.fitWidth,
           appendApiToUrl: false,
-          imageUrl: image,
+          imageUrl: loc.imageUrl,
           progressIndicatorBuilder: (_, __, progress) => SizedBox(
             height: MediaQuery.of(context).size.height *
                 InfinityContinuousConfig.verticalPageHeightRatio,
@@ -414,21 +360,19 @@ class ListViewReaderMode extends HookConsumerWidget {
     }
 
     Widget buildSeparator(BuildContext context, int globalIndex) {
-      final isBoundary =
-          InfinityContinuousUtils.isChapterBoundary(globalIndex, loadedChapters.value);
+      final isBoundary = InfinityContinuousUtils.isChapterBoundary(
+          globalIndex, loadedChapters.value);
       if (!isBoundary || loadedChapters.value.length <= 1) {
         return const SizedBox.shrink();
       }
-      final separatorInfo = InfinityContinuousChapterSeparator.getSeparatorInfo(
+      final info = InfinityContinuousChapterSeparator.getSeparatorInfo(
           globalIndex, loadedChapters.value);
-      if (separatorInfo == null) return const SizedBox.shrink();
+      if (info == null) return const SizedBox.shrink();
       return InfinityContinuousChapterSeparator(
-        chapterName: separatorInfo.chapterName,
-        isChapterStart: separatorInfo.isChapterStart,
+        chapterName: info.chapterName,
+        isChapterStart: info.isChapterStart,
       );
     }
-
-    // ---- Slider / nav callbacks -----------------------------------
 
     void jumpToChapterRelative(int chapterIdx) {
       final globalIndex =
@@ -444,43 +388,37 @@ class ListViewReaderMode extends HookConsumerWidget {
         'chapter_idx': chapterIdx,
         'visible_ch': currentVisibleChapter.value.id,
       });
-      final key = pageKeys.value[globalIndex];
+      final key = pageKeys.value[
+          _pageKeyId(currentVisibleChapter.value.id, chapterIdx)];
       final ctx = key?.currentContext;
-      if (ctx != null) {
-        if (isAnimationEnabled) {
-          Scrollable.ensureVisible(
-            ctx,
-            alignment: 0.0,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        } else {
-          Scrollable.ensureVisible(ctx, alignment: 0.0, duration: Duration.zero);
-        }
-      }
+      if (ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.0,
+        duration: isAnimationEnabled
+            ? const Duration(milliseconds: 300)
+            : Duration.zero,
+        curve: Curves.easeOut,
+      );
     }
 
     void handlePageNavigation({required bool isNext}) {
-      final currentGlobal = currentIndex.value;
-      final targetGlobal = isNext ? currentGlobal + 1 : currentGlobal - 1;
-      if (targetGlobal < 0 || targetGlobal >= totalPages) return;
-      final key = pageKeys.value[targetGlobal];
+      final target = currentIndex.value + (isNext ? 1 : -1);
+      if (target < 0 || target >= totalPages) return;
+      final loc = _locateGlobalIndex(target, loadedChapters.value);
+      if (loc == null) return;
+      final key = pageKeys.value[_pageKeyId(loc.chapterId, loc.pageIdx)];
       final ctx = key?.currentContext;
-      if (ctx != null) {
-        if (isAnimationEnabled) {
-          Scrollable.ensureVisible(
-            ctx,
-            alignment: 0.0,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        } else {
-          Scrollable.ensureVisible(ctx, alignment: 0.0, duration: Duration.zero);
-        }
-      }
+      if (ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.0,
+        duration: isAnimationEnabled
+            ? const Duration(milliseconds: 300)
+            : Duration.zero,
+        curve: Curves.easeOut,
+      );
     }
-
-    // ---- Scroll edge detection (chapter prefetch) -----------------
 
     bool onScrollNotification(ScrollNotification notification) {
       if (notification is! ScrollUpdateNotification) return false;
@@ -500,7 +438,6 @@ class ListViewReaderMode extends HookConsumerWidget {
           metrics.minScrollExtent +
               InfinityContinuousConfig.scrollExtentTolerance;
 
-      // End-of-list -> load next chapter
       if (atEnd && delta > 0 && !hasReachedEnd.value) {
         final next = nextPrevChapterPair.value?.first;
         if (next != null &&
@@ -515,18 +452,23 @@ class ListViewReaderMode extends HookConsumerWidget {
             context, lastEndFeedbackTime);
       }
 
-      // Start-of-list -> load previous chapter (we don't preserve
-      // scroll because plain ListView doesn't need it — prepending an
-      // item shifts content, but the user is already at offset 0 so
-      // we deliberately re-set offset to keep their view).
       if (atStart && delta < 0 && !hasReachedStart.value) {
         final prev = nextPrevChapterPair.value?.second;
         if (prev != null &&
             (lastStartScrollTime.value == null ||
                 now.difference(lastStartScrollTime.value!) > cooldown)) {
           lastStartScrollTime.value = now;
-          _loadPreviousChapter(ref, prev, loadedChapters, loadingPrevious,
-              hasReachedStart, scrollController, context);
+          _loadPreviousChapter(
+            ref,
+            prev,
+            loadedChapters,
+            loadingPrevious,
+            hasReachedStart,
+            scrollController,
+            pageKeys.value,
+            pageRects.value,
+            context,
+          );
         }
       } else if (atStart && delta < 0 && hasReachedStart.value) {
         InfinityContinuousFeedback.showStartOfMangaFeedback(
@@ -548,7 +490,9 @@ class ListViewReaderMode extends HookConsumerWidget {
 
     final wrappedList = NotificationListener<ScrollNotification>(
       onNotification: onScrollNotification,
-      child: !kIsWeb && (Platform.isAndroid || Platform.isIOS) && isPinchToZoomEnabled
+      child: !kIsWeb &&
+              (Platform.isAndroid || Platform.isIOS) &&
+              isPinchToZoomEnabled
           ? _ListViewWithPinch(
               scrollController: scrollController,
               scrollDirection: scrollDirection,
@@ -571,7 +515,6 @@ class ListViewReaderMode extends HookConsumerWidget {
         onNext: () => handlePageNavigation(isNext: true),
         child: wrappedList,
       ),
-      // Diagnostic BUMP overlay (debug branch only).
       Positioned(
         right: 12,
         bottom: 96,
@@ -615,8 +558,16 @@ class ListViewReaderMode extends HookConsumerWidget {
   }
 }
 
-/// Find the image URL for a global page index by walking loaded chapters.
-String? _findImageUrlForGlobalIndex(
+String _pageKeyId(int chapterId, int pageIdx) => '$chapterId:$pageIdx';
+
+class _PageLoc {
+  const _PageLoc(this.chapterId, this.pageIdx, this.imageUrl);
+  final int chapterId;
+  final int pageIdx;
+  final String imageUrl;
+}
+
+_PageLoc? _locateGlobalIndex(
   int globalIndex,
   List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})> loaded,
 ) {
@@ -624,17 +575,21 @@ String? _findImageUrlForGlobalIndex(
   for (final entry in loaded) {
     final n = entry.pages.pages.length;
     if (globalIndex < cumulative + n) {
-      return entry.pages.pages[globalIndex - cumulative];
+      final pageIdx = globalIndex - cumulative;
+      return _PageLoc(
+        entry.chapterId,
+        pageIdx,
+        entry.pages.pages[pageIdx],
+      );
     }
     cumulative += n;
   }
   return null;
 }
 
-/// Synthetic ItemPosition shape used internally to keep
-/// InfinityContinuousUtils helpers usable.
 class _FakeItemPosition {
-  const _FakeItemPosition(this.index, this.itemLeadingEdge, this.itemTrailingEdge);
+  const _FakeItemPosition(
+      this.index, this.itemLeadingEdge, this.itemTrailingEdge);
   final int index;
   final double itemLeadingEdge;
   final double itemTrailingEdge;
@@ -649,9 +604,6 @@ class _PageRect {
 typedef _RectReporter = void Function(_PageRect rect);
 typedef _DisposeReporter = void Function(int index);
 
-/// Wraps a page widget, reports its post-layout viewport rectangle via
-/// callback. Used to derive visibility state without an
-/// ItemPositionsListener.
 class _VisibilityReporter extends StatefulWidget {
   const _VisibilityReporter({
     super.key,
@@ -688,8 +640,6 @@ class _VisibilityReporterState extends State<_VisibilityReporter> {
       if (!mounted) return;
       final renderObject = context.findRenderObject();
       if (renderObject is! RenderBox || !renderObject.attached) return;
-      // Position relative to the screen (viewport top is ~0 for the
-      // root MediaQuery; close enough for our visibility math).
       final topLeft = renderObject.localToGlobal(Offset.zero);
       widget.onReport(_PageRect(
         topLeft.dy,
@@ -700,7 +650,6 @@ class _VisibilityReporterState extends State<_VisibilityReporter> {
 
   @override
   Widget build(BuildContext context) {
-    // Also schedule on every layout in case scrolling moves us.
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final renderObject = context.findRenderObject();
@@ -721,10 +670,6 @@ class _VisibilityReporterState extends State<_VisibilityReporter> {
   }
 }
 
-/// Wraps a ListView in a ZoomView for pinch-to-zoom. ZoomView accepts
-/// any ScrollController, so the plain ListView's controller drops in
-/// without the ScrollOffsetToScrollController adapter the SPL version
-/// needed.
 class _ListViewWithPinch extends StatelessWidget {
   const _ListViewWithPinch({
     required this.scrollController,
@@ -749,13 +694,11 @@ class _ListViewWithPinch extends StatelessWidget {
   }
 }
 
-/// Adapter around InfinityContinuousChapterLoader.loadNextChapter that
-/// works with the ListView-based reader (no scroll position
-/// preservation needed for appends).
 Future<void> _loadNextChapter(
   WidgetRef ref,
   ChapterDto nextChapter,
-  ValueNotifier<List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>>
+  ValueNotifier<
+          List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>>
       loadedChapters,
   ValueNotifier<bool> loadingNext,
   ValueNotifier<bool> hasReachedEnd,
@@ -769,42 +712,54 @@ Future<void> _loadNextChapter(
     }
     final pages = await ref
         .read(chapterPagesProvider(chapterId: nextChapter.id).future);
-    if (pages != null) {
-      final exists = loadedChapters.value
-          .any((e) => e.chapterId == nextChapter.id);
-      if (!exists) {
-        loadedChapters.value = [
-          ...loadedChapters.value,
-          (pages: pages, chapter: nextChapter, chapterId: nextChapter.id),
-        ];
-      }
-      if (context.mounted) {
-        InfinityContinuousFeedback.showNextChapterLoadedFeedback(
-            context, nextChapter.name);
-      }
-    } else {
+    if (pages == null) {
       hasReachedEnd.value = true;
+      return;
     }
-  } catch (e) {
+    final exists =
+        loadedChapters.value.any((e) => e.chapterId == nextChapter.id);
+    if (exists) return;
+    loadedChapters.value = [
+      ...loadedChapters.value,
+      (pages: pages, chapter: nextChapter, chapterId: nextChapter.id),
+    ];
+    if (context.mounted) {
+      InfinityContinuousFeedback.showNextChapterLoadedFeedback(
+          context, nextChapter.name);
+    }
+  } catch (_) {
     hasReachedEnd.value = true;
   } finally {
     loadingNext.value = false;
   }
 }
 
-/// Adapter for loadPreviousChapter. We prepend the chapter — plain
-/// ListView WILL shift visible content as a result. To compensate, we
-/// capture the current scroll offset, then after the rebuild settle,
-/// add the prepended chapter's height to the offset so the user stays
-/// looking at the same content.
+/// Back-load the previous chapter without the user seeing a jump.
+///
+/// Picks the page closest to the viewport top as the "anchor",
+/// records its screen-space top in pixels, then prepends the chapter.
+/// After the rebuild has laid out, looks up the anchor widget by its
+/// stable ``(chapterId, pageIdx)`` GlobalKey, measures where it landed
+/// via ``localToGlobal``, and adjusts ``scrollController.offset`` so
+/// the anchor sits at the same screen position it did before.
+///
+/// The anchor approach handles arbitrary prepended heights and page
+/// heights — including pages taller than the viewport — without
+/// needing to estimate the prepended chapter's pixel height. The only
+/// failure mode is image-loading-after-restore changing the prepended
+/// chapter's height; in practice the placeholders are close enough to
+/// the rendered height that any residual drift is sub-page.
 Future<void> _loadPreviousChapter(
   WidgetRef ref,
   ChapterDto previousChapter,
-  ValueNotifier<List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>>
+  ValueNotifier<
+          List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>>
       loadedChapters,
   ValueNotifier<bool> loadingPrevious,
   ValueNotifier<bool> hasReachedStart,
   ScrollController scrollController,
+  Map<String, GlobalKey> pageKeys,
+  Map<int, _PageRect> pageRects,
   BuildContext context,
 ) async {
   loadingPrevious.value = true;
@@ -819,64 +774,79 @@ Future<void> _loadPreviousChapter(
       hasReachedStart.value = true;
       return;
     }
-    final exists = loadedChapters.value
-        .any((e) => e.chapterId == previousChapter.id);
+    final exists =
+        loadedChapters.value.any((e) => e.chapterId == previousChapter.id);
     if (exists) return;
 
-    // Save current offset BEFORE the prepend.
-    final offsetBefore = scrollController.hasClients
-        ? scrollController.position.pixels
-        : 0.0;
+    GlobalKey? anchorKey;
+    double anchorTopBefore = 0;
+    {
+      int? anchorGlobalIdx;
+      double bestDist = double.infinity;
+      for (final e in pageRects.entries) {
+        final dist = e.value.top.abs();
+        if (dist < bestDist) {
+          bestDist = dist;
+          anchorGlobalIdx = e.key;
+          anchorTopBefore = e.value.top;
+        }
+      }
+      if (anchorGlobalIdx != null) {
+        final loc =
+            _locateGlobalIndex(anchorGlobalIdx, loadedChapters.value);
+        if (loc != null) {
+          anchorKey = pageKeys[_pageKeyId(loc.chapterId, loc.pageIdx)];
+        }
+      }
+    }
 
     loadedChapters.value = [
-      (pages: pages, chapter: previousChapter, chapterId: previousChapter.id),
+      (
+        pages: pages,
+        chapter: previousChapter,
+        chapterId: previousChapter.id
+      ),
       ...loadedChapters.value,
     ];
+    // Indices shifted; drop stale rects so we don't trip visibility
+    // math before the new reports arrive.
+    pageRects.clear();
 
-    // After layout: the prepended chapter's pages now occupy the
-    // top of the list, pushing existing content DOWN. To keep the
-    // user looking at the same content, increase scroll offset by
-    // the height of the newly prepended chapter.
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (!scrollController.hasClients) return;
-      // Approximate: prepended chapter occupies the FULL list above
-      // the previous offset. New maxScrollExtent - old maxScrollExtent
-      // approximates the prepended height.
-      // For a clean implementation we'd measure, but for now jump
-      // to (offsetBefore + estimated_prepend_height).
-      // Practical workaround: ask the controller to scroll to the
-      // first page of the previously-first chapter (currently at
-      // index = pages.pages.length).
-      final pageCount = pages.pages.length;
-      final firstNewChapterPageIndex = pageCount; // 0-indexed, this is the start of the OLD first chapter now
-      _scrollToGlobalIndex(scrollController, firstNewChapterPageIndex,
-          offsetBefore);
-    });
+    if (anchorKey != null) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!scrollController.hasClients) return;
+        final ctx = anchorKey!.currentContext;
+        if (ctx == null) return;
+        final renderObject = ctx.findRenderObject();
+        if (renderObject is! RenderBox || !renderObject.attached) return;
+        final currentTop = renderObject.localToGlobal(Offset.zero).dy;
+        final currentOffset = scrollController.offset;
+        final delta = currentTop - anchorTopBefore;
+        final desired = currentOffset + delta;
+        final clamped = desired.clamp(
+          scrollController.position.minScrollExtent,
+          scrollController.position.maxScrollExtent,
+        );
+        if ((clamped - currentOffset).abs() > 0.5) {
+          scrollController.jumpTo(clamped);
+        }
+        ReaderDebugLog.log('prev_chapter_anchor_restore', {
+          'top_before': anchorTopBefore.toStringAsFixed(1),
+          'top_after': currentTop.toStringAsFixed(1),
+          'delta': delta.toStringAsFixed(1),
+          'old_offset': currentOffset.round(),
+          'new_offset': clamped.round(),
+        });
+      });
+    }
 
     if (context.mounted) {
       InfinityContinuousFeedback.showPreviousChapterLoadedFeedback(
           context, previousChapter.name);
     }
-  } catch (e) {
+  } catch (_) {
     hasReachedStart.value = true;
   } finally {
     loadingPrevious.value = false;
   }
-}
-
-void _scrollToGlobalIndex(
-  ScrollController controller,
-  int globalIndex,
-  double previousOffset,
-) {
-  // For the prepend case we can't reliably ensureVisible because the
-  // target page's GlobalKey may not have laid out yet. Approximation:
-  // assume the prepended chapter's height ≈ the scrollable list's
-  // OLD maxScrollExtent — and offset by that.
-  if (!controller.hasClients) return;
-  // Rough estimate: previously the list was extentNow - prependHeight,
-  // so prependHeight ≈ extentNow - extentOld. We don't have extentOld.
-  // Fallback: bump offset by viewport heights based on global index.
-  final viewport = controller.position.viewportDimension;
-  controller.jumpTo(previousOffset + viewport * 7); // rough; pages ~7 vh.
 }

@@ -45,20 +45,12 @@ class InfinityContinuousConfig {
   /// Default scroll animation curve
   static const Curve scrollAnimationCurve = Curves.easeOut;
 
-  /// Cache extent multiplier for different scroll directions.
-  ///
-  /// In webtoon mode pages are very tall (7-10x viewport height) and
-  /// ScrollablePositionedList's primary-target anchor flips when the
-  /// user crosses a page boundary, causing a visible backward jump if
-  /// the next item's widget is being freshly constructed at that
-  /// moment. Keeping a generous cache window keeps the neighboring
-  /// pages rendered so the anchor flip doesn't reanchor onto a
-  /// reconstructed (and momentarily mis-measured) widget.
-  ///
-  /// 15.0 covers ~2 pages of cache in each direction off-viewport,
-  /// which is enough to absorb typical slow backward scroll across a
-  /// page boundary without the destroy/reconstruct cycle firing.
-  static const double verticalCacheMultiplier = 15.0;
+  /// Cache extent multiplier in units of one viewport. Controls how
+  /// far above and below the visible area Flutter keeps page widgets
+  /// laid out. 2.0 = roughly two viewport heights of cache on each
+  /// side, enough to keep adjacent pages alive for smooth scrolling
+  /// without bloating memory.
+  static const double verticalCacheMultiplier = 2.0;
   static const double horizontalCacheMultiplier = 2.0;
 
   /// Page height/width ratio for different orientations

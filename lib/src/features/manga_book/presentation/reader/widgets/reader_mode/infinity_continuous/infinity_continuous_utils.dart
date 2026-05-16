@@ -4,17 +4,25 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import 'package:flutter/material.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../../../../domain/chapter/chapter_model.dart';
 import '../../../../../domain/chapter_page/chapter_page_model.dart';
 
-/// Utility functions for infinity continuous reader mode
+/// Utility functions for the continuous reader modes.
+///
+/// Helpers fall into two groups:
+///   * SPL-only: ``calculateVisibleArea`` is used by the single-chapter
+///     SPL implementation in ``infinity_continuous_reader_mode.dart``
+///     for "most-visible page" tracking against ``ItemPosition``.
+///   * Shared: the multi-chapter helpers
+///     (``getTotalPages``, ``isChapterBoundary``,
+///     ``convertChapterIndexToGlobalIndex``, ``createChapterPagesDto``)
+///     are used by the ListView-based multi-chapter reader.
 class InfinityContinuousUtils {
   const InfinityContinuousUtils._();
 
-  /// Calculate visible area of an item position
+  /// Visible fraction of an item position in [0, 1].
   static double calculateVisibleArea(ItemPosition position) {
     final double leadingEdge = position.itemLeadingEdge.clamp(0.0, 1.0);
     final double trailingEdge = position.itemTrailingEdge.clamp(0.0, 1.0);
@@ -25,7 +33,7 @@ class InfinityContinuousUtils {
     return (visibleEnd - visibleStart).clamp(0.0, 1.0);
   }
 
-  /// Calculate total pages across all loaded chapters
+  /// Sum of pages across all loaded chapters.
   static int getTotalPages(
     List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>
         loadedChapters,
@@ -36,30 +44,9 @@ class InfinityContinuousUtils {
     );
   }
 
-  /// Get chapter info for a specific index
-  static ({String page, String chapterName, int chapterId})?
-      getChapterInfoForIndex(
-    int index,
-    List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>
-        loadedChapters,
-  ) {
-    int currentIndex = 0;
-    for (final chapterData in loadedChapters) {
-      if (index >= currentIndex &&
-          index < currentIndex + chapterData.pages.pages.length) {
-        final pageIndex = index - currentIndex;
-        return (
-          page: chapterData.pages.pages[pageIndex],
-          chapterName: chapterData.chapter.name,
-          chapterId: chapterData.chapterId,
-        );
-      }
-      currentIndex += chapterData.pages.pages.length;
-    }
-    return null;
-  }
-
-  /// Check if the index is at a chapter boundary
+  /// True if [index] is the first page of a chapter that has a chapter
+  /// before it, or the last page of a chapter that has a chapter after
+  /// it — used to decide where to render a chapter separator.
   static bool isChapterBoundary(
     int index,
     List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>
@@ -67,11 +54,9 @@ class InfinityContinuousUtils {
   ) {
     int currentIndex = 0;
     for (final chapterData in loadedChapters) {
-      // Check if this is the start of a new chapter (except the first one)
       if (index == currentIndex && currentIndex > 0) {
         return true;
       }
-      // Check if this is the end of a chapter (except the last one)
       if (index == currentIndex + chapterData.pages.pages.length - 1 &&
           currentIndex + chapterData.pages.pages.length <
               getTotalPages(loadedChapters)) {
@@ -82,28 +67,9 @@ class InfinityContinuousUtils {
     return false;
   }
 
-  /// Get chapter and page index for a global index
-  static ({ChapterDto chapter, int pageIndex})? getChapterAndPageForGlobalIndex(
-    int globalIndex,
-    List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>
-        loadedChapters,
-  ) {
-    int currentIndex = 0;
-    for (final chapterData in loadedChapters) {
-      if (globalIndex >= currentIndex &&
-          globalIndex < currentIndex + chapterData.pages.pages.length) {
-        final pageIndex = globalIndex - currentIndex;
-        return (
-          chapter: chapterData.chapter,
-          pageIndex: pageIndex,
-        );
-      }
-      currentIndex += chapterData.pages.pages.length;
-    }
-    return null;
-  }
-
-  /// Convert chapter-relative index to global index
+  /// Convert a chapter-relative page index for a given chapter into the
+  /// global page index across all loaded chapters. Returns -1 if the
+  /// chapter is not loaded.
   static int convertChapterIndexToGlobalIndex(
     int chapterIndex,
     List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>
@@ -117,10 +83,11 @@ class InfinityContinuousUtils {
       }
       globalIndex += chapterData.pages.pages.length;
     }
-    return -1; // Chapter not found
+    return -1;
   }
 
-  /// Create ChapterPagesDto for the current visible chapter
+  /// Return the ``ChapterPagesDto`` for [currentChapter] within the
+  /// loaded set, falling back to [fallbackChapterPages] if not loaded.
   static ChapterPagesDto createChapterPagesDto(
     List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>
         loadedChapters,
@@ -132,177 +99,6 @@ class InfinityContinuousUtils {
         return chapterData.pages;
       }
     }
-    // Fallback to original chapter pages if not found
     return fallbackChapterPages;
-  }
-
-  /// Update current index and chapter based on visible positions
-  static void updateCurrentIndexAndChapter(
-    List<ItemPosition> positions,
-    ValueNotifier<int> currentIndex,
-    List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>
-        loadedChapters,
-    ValueNotifier<ChapterDto> currentVisibleChapter,
-    ValueNotifier<int> currentChapterPageIndex,
-    double visibilityThreshold,
-  ) {
-    if (positions.isEmpty) return;
-
-    // Find the item that's most visible
-    ItemPosition? mostVisible;
-    double bestVisibleArea = 0.0;
-
-    for (final ItemPosition position in positions) {
-      final double visibleArea = calculateVisibleArea(position);
-
-      if (visibleArea > bestVisibleArea && visibleArea > visibilityThreshold) {
-        bestVisibleArea = visibleArea;
-        mostVisible = position;
-      }
-    }
-
-    if (mostVisible != null) {
-      currentIndex.value = mostVisible.index;
-
-      // Find which chapter this index belongs to and the page within that chapter
-      final chapterInfo =
-          getChapterAndPageForGlobalIndex(mostVisible.index, loadedChapters);
-      if (chapterInfo != null) {
-        // Only update if the chapter has actually changed to avoid unnecessary rebuilds
-        if (currentVisibleChapter.value.id != chapterInfo.chapter.id) {
-          currentVisibleChapter.value = chapterInfo.chapter;
-        }
-        currentChapterPageIndex.value = chapterInfo.pageIndex;
-      }
-    }
-  }
-
-  /// Check if a specific chapter has been completed based on scroll position
-  /// Returns list of chapters that should be marked as completed
-  /// A chapter is considered complete when:
-  /// 1. The user has scrolled to view pages from a later chapter (previous chapters auto-complete)
-  /// 2. The user is viewing the very last page of a chapter with high visibility
-  static List<ChapterDto> getCompletedChapters(
-    List<ItemPosition> positions,
-    List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>
-        loadedChapters,
-    double visibilityThreshold,
-  ) {
-    if (positions.isEmpty || loadedChapters.isEmpty) return [];
-
-    final completedChapters = <ChapterDto>[];
-
-    // Find the highest visible index with sufficient visibility
-    int maxVisibleIndex = -1;
-    double maxVisibility = 0.0;
-
-    for (final position in positions) {
-      final visibleArea = calculateVisibleArea(position);
-      if (visibleArea > visibilityThreshold) {
-        if (position.index > maxVisibleIndex) {
-          maxVisibleIndex = position.index;
-          maxVisibility = visibleArea;
-        }
-      }
-    }
-
-    if (maxVisibleIndex == -1) return [];
-
-    // Determine which chapter the max visible index belongs to
-    int currentIndex = 0;
-    int currentChapterIndex = -1;
-    for (int i = 0; i < loadedChapters.length; i++) {
-      final chapterData = loadedChapters[i];
-      final chapterEndIndex = currentIndex + chapterData.pages.pages.length - 1;
-
-      if (maxVisibleIndex >= currentIndex &&
-          maxVisibleIndex <= chapterEndIndex) {
-        currentChapterIndex = i;
-
-        // Check if user is viewing the very last page of this chapter with good visibility
-        if (maxVisibleIndex == chapterEndIndex &&
-            maxVisibility > 0.7 &&
-            !chapterData.chapter.isRead) {
-          completedChapters.add(chapterData.chapter);
-        }
-        break;
-      }
-
-      currentIndex += chapterData.pages.pages.length;
-    }
-
-    // Mark all previous chapters as complete if user has moved to a later chapter
-    if (currentChapterIndex > 0) {
-      for (int i = 0; i < currentChapterIndex; i++) {
-        final chapterData = loadedChapters[i];
-        if (!chapterData.chapter.isRead) {
-          completedChapters.add(chapterData.chapter);
-        }
-      }
-    }
-
-    return completedChapters;
-  }
-
-  /// Check if scroll position is stable (not in the middle of a transition)
-  static bool isScrollPositionStable(
-    List<ItemPosition> positions,
-    double stabilityThreshold,
-  ) {
-    if (positions.isEmpty) return false;
-
-    // Check if any items are in transition (partially visible at edges)
-    for (final position in positions) {
-      // If an item is partially cut off at the top or bottom with low visibility,
-      // it might indicate the scroll is in transition
-      if ((position.itemLeadingEdge < 0.0 && position.itemLeadingEdge > -0.5) ||
-          (position.itemTrailingEdge > 1.0 &&
-              position.itemTrailingEdge < 1.5)) {
-        final visibleArea = calculateVisibleArea(position);
-        if (visibleArea < stabilityThreshold) {
-          return false;
-        }
-      }
-    }
-
-    return true;
-  }
-
-  /// Get the most stable reference item for scroll restoration
-  static ItemPosition? getMostStableReferenceItem(
-      List<ItemPosition> positions) {
-    if (positions.isEmpty) return null;
-
-    // Sort by stability score (higher is better)
-    final sortedPositions = positions.toList()
-      ..sort((a, b) {
-        final aScore = _calculateStabilityScore(a);
-        final bScore = _calculateStabilityScore(b);
-        return bScore.compareTo(aScore);
-      });
-
-    return sortedPositions.first;
-  }
-
-  /// Calculate stability score for an item position
-  static double _calculateStabilityScore(ItemPosition position) {
-    final visibleArea = calculateVisibleArea(position);
-
-    // Prefer items that are fully visible
-    if (position.itemLeadingEdge >= 0.0 && position.itemTrailingEdge <= 1.0) {
-      return visibleArea + 1.0; // Bonus for full visibility
-    }
-
-    // Prefer items that span the viewport (more stable reference)
-    if (position.itemLeadingEdge <= 0.0 && position.itemTrailingEdge >= 1.0) {
-      return visibleArea + 0.5; // Bonus for spanning viewport
-    }
-
-    // Items at the top edge are more stable than bottom edge
-    if (position.itemLeadingEdge <= 0.0 && position.itemTrailingEdge > 0.0) {
-      return visibleArea + 0.3; // Small bonus for top edge
-    }
-
-    return visibleArea;
   }
 }
