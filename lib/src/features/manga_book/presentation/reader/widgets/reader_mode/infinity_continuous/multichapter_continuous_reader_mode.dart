@@ -34,7 +34,6 @@ import 'infinity_continuous_config.dart';
 import 'infinity_continuous_feedback.dart';
 import 'infinity_continuous_utils.dart';
 import 'measure_size.dart';
-import 'reader_scroll_diag.dart';
 
 typedef _LoadedChapter = ({
   ChapterPagesDto pages,
@@ -484,110 +483,32 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
       separatorBuilder: buildSeparator,
     );
 
-    // TEMP scroll diagnostic: log any large offset jump (a snap) with the
-    // top-visible page + offset, so the reported back-scroll snap is captured
-    // on-device. Remove once fixed.
-    final diagPrevTop = useRef<int>(-999);
-    final diagPrevPx = useRef<double>(0);
-    final loggedChild = NotificationListener<ScrollNotification>(
-      onNotification: (n) {
-        if (n is ScrollUpdateNotification) {
-          int topIdx = -1;
-          double topLead = 2;
-          for (final p in positionsListener.itemPositions.value) {
-            if (p.itemLeadingEdge < topLead) {
-              topLead = p.itemLeadingEdge;
-              topIdx = p.index;
-            }
-          }
-          final px = n.metrics.pixels;
-          final d = n.scrollDelta ?? 0;
-          final prevTop = diagPrevTop.value;
-          final flipped = topIdx != prevTop;
-          // THE SNAP SIGNATURE: scrolling UP (top index decreases), the new top
-          // strip appears already near its TOP (lead > -1) instead of peeking
-          // in from above at its bottom (lead ~ -8). That means the scroll
-          // jumped over the whole previous strip to its top.
-          final isSnap = flipped &&
-              prevTop != -999 &&
-              topIdx < prevTop &&
-              topLead > -1.0;
-          if (isSnap || flipped || d.abs() > 150) {
-            final tag = isSnap ? "SNAP!" : (flipped ? "TOP" : "JMP");
-            ReaderScrollDiag.add(
-                '$tag $prevTop->$topIdx '
-                'd=${d.round()} px=${px.round()} dpx=${(px - diagPrevPx.value).round()} '
-                'lead=${topLead.toStringAsFixed(2)} '
-                'min=${n.metrics.minScrollExtent.round()} max=${n.metrics.maxScrollExtent.round()} '
-                'visCh=${currentVisibleChapter.value.id} relPage=${currentChapterPageIndex.value}');
-            diagPrevTop.value = topIdx;
-          }
-          diagPrevPx.value = px;
-        }
-        return false;
-      },
-      child: AppUtils.wrapOn(
-        !kIsWeb &&
-                (Platform.isAndroid || Platform.isIOS) &&
-                isPinchToZoomEnabled
-            ? (Widget child) => ZoomView(
-                  controller: zoomScrollController,
-                  scrollAxis: scrollDirection,
-                  maxScale: InfinityContinuousConfig.maxZoomScale,
-                  doubleTapDrag: true,
-                  forceHoldOnPointerDown: true,
-                  child: child,
-                )
-            : null,
-        positionedList,
-      ),
+    final child = AppUtils.wrapOn(
+      !kIsWeb && (Platform.isAndroid || Platform.isIOS) && isPinchToZoomEnabled
+          ? (Widget child) => ZoomView(
+                controller: zoomScrollController,
+                scrollAxis: scrollDirection,
+                maxScale: InfinityContinuousConfig.maxZoomScale,
+                doubleTapDrag: true,
+                forceHoldOnPointerDown: true,
+                child: child,
+              )
+          : null,
+      positionedList,
     );
 
-    return Stack(
-      children: [
-        ReaderWrapper(
-          scrollDirection: scrollDirection,
-          chapterPages: InfinityContinuousUtils.createChapterPagesDto(
-              loadedChapters.value, currentVisibleChapter.value, chapterPages),
-          chapter: currentVisibleChapter.value,
-          manga: manga,
-          showReaderLayoutAnimation: showReaderLayoutAnimation,
-          currentIndex: currentChapterPageIndex.value,
-          onChanged: jumpToChapterRelative,
-          onPrevious: () => handlePageNavigation(isNext: false),
-          onNext: () => handlePageNavigation(isNext: true),
-          child: loggedChild,
-        ),
-        Positioned(
-          right: 10,
-          bottom: 150,
-          child: SafeArea(
-            child: Material(
-              color: Colors.deepPurple.withValues(alpha: 0.85),
-              borderRadius: BorderRadius.circular(20),
-              child: InkWell(
-                onTap: () async {
-                  await ReaderScrollDiag.copyToClipboard();
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Reader scroll log copied'),
-                      duration: Duration(seconds: 2),
-                    ));
-                  }
-                },
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Text('COPY LOG',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
+    return ReaderWrapper(
+      scrollDirection: scrollDirection,
+      chapterPages: InfinityContinuousUtils.createChapterPagesDto(
+          loadedChapters.value, currentVisibleChapter.value, chapterPages),
+      chapter: currentVisibleChapter.value,
+      manga: manga,
+      showReaderLayoutAnimation: showReaderLayoutAnimation,
+      currentIndex: currentChapterPageIndex.value,
+      onChanged: jumpToChapterRelative,
+      onPrevious: () => handlePageNavigation(isNext: false),
+      onNext: () => handlePageNavigation(isNext: true),
+      child: child,
     );
   }
 }
