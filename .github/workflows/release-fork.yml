@@ -1,0 +1,144 @@
+# Multi-platform release builder for Aaron's fork.
+#
+# Triggered by pushing a v*.*.* tag (or manually). Builds Android, Linux,
+# Windows, macOS and Web from the tagged commit and attaches the artifacts to
+# the GitHub release. Distinct from the inherited upstream `publish.yml`
+# (which targets winget/homebrew/Play Store and uses unpinned Flutter).
+#
+# Android is signed with the repo's debug keystore (stored as secrets) so CI
+# builds keep the same signature as locally-built debug APKs — installs upgrade
+# cleanly instead of being rejected for a signature mismatch.
+name: Release (fork)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+env:
+  pkg_name: tachidesk-sorayomi
+  # Pinned to the project's toolchain — newer Flutter breaks the Dart 3.8 deps.
+  flutter_version: "3.32.4"
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: android
+          - os: ubuntu-latest
+            target: linux
+          - os: ubuntu-latest
+            target: web
+          - os: macos-latest
+            target: macos
+          - os: windows-latest
+            target: windows
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.flutter_version }}
+          channel: stable
+          cache: true
+
+      - name: Set up Java (Android)
+        if: matrix.target == 'android'
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: "17"
+
+      - name: Install Linux build deps
+        if: matrix.target == 'linux'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y clang cmake ninja-build pkg-config \
+            libgtk-3-dev libx11-dev libblkid-dev liblzma-dev
+
+      - name: Enable desktop targets
+        if: matrix.target == 'linux' || matrix.target == 'macos' || matrix.target == 'windows'
+        run: flutter config --enable-linux-desktop --enable-macos-desktop --enable-windows-desktop
+
+      - run: flutter pub get
+      - run: flutter gen-l10n
+      - run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Configure Android signing
+        if: matrix.target == 'android'
+        working-directory: android
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/release-keystore.jks
+          {
+            echo "storeFile=release-keystore.jks"
+            echo "keyAlias=${{ secrets.KEY_ALIAS }}"
+            echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}"
+            echo "keyPassword=${{ secrets.KEY_PASSWORD }}"
+          } > key.properties
+
+      # ---- builds ----
+      - name: Build Android
+        if: matrix.target == 'android'
+        run: |
+          flutter build apk --release
+          flutter build apk --release --split-per-abi
+
+      - name: Build ${{ matrix.target }}
+        if: matrix.target != 'android'
+        run: flutter build ${{ matrix.target }} --release
+
+      # ---- package into dist/ ----
+      - name: Package Android
+        if: matrix.target == 'android'
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk            "dist/${pkg_name}-${{ github.ref_name }}-android-universal.apk"
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk  "dist/${pkg_name}-${{ github.ref_name }}-android-arm64-v8a.apk"
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "dist/${pkg_name}-${{ github.ref_name }}-android-armeabi-v7a.apk"
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk     "dist/${pkg_name}-${{ github.ref_name }}-android-x86_64.apk"
+
+      - name: Package Linux
+        if: matrix.target == 'linux'
+        working-directory: build/linux/x64/release/bundle
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          GZIP=-9 tar czf "$GITHUB_WORKSPACE/dist/${pkg_name}-${{ github.ref_name }}-linux-x64.tar.gz" *
+
+      - name: Package Web
+        if: matrix.target == 'web'
+        working-directory: build/web
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          zip -r "$GITHUB_WORKSPACE/dist/${pkg_name}-${{ github.ref_name }}-web.zip" *
+
+      - name: Package macOS
+        if: matrix.target == 'macos'
+        run: |
+          mkdir -p dist
+          APP=$(find build/macos/Build/Products/Release -maxdepth 1 -name "*.app" | head -1)
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/${pkg_name}-${{ github.ref_name }}-macos-x64.zip"
+
+      - name: Package Windows
+        if: matrix.target == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath "dist\${env:pkg_name}-${{ github.ref_name }}-windows-x64.zip"
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
