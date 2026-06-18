@@ -31,15 +31,14 @@ import 'infinity_continuous/multichapter_continuous_reader_mode.dart';
 
 /// Continuous reader mode entry point.
 ///
-/// Vertical webtoon mode with infinity scrolling enabled is delegated
-/// to ``ListViewReaderMode`` (plain ``ListView``-based, replaces the
-/// previous SPL implementation that produced backward-bump jumps on
-/// chapter boundary crossings).
+/// Vertical webtoon mode with infinity scrolling enabled is delegated to
+/// [MultiChapterContinuousReaderMode], which loads adjacent chapters into
+/// a single `ScrollablePositionedList` so reading flows seamlessly across
+/// chapter boundaries.
 ///
-/// Horizontal scroll and "infinity scrolling off" both use the
-/// single-chapter SPL implementation below — that mode never crosses a
-/// chapter boundary inside the reader, so the SPL anchor flip can't
-/// trigger.
+/// Horizontal scroll and "infinity scrolling off" use the single-chapter
+/// implementation below — it never crosses a chapter boundary inside the
+/// reader, so multi-chapter machinery isn't needed.
 class InfinityContinuousReaderMode extends HookConsumerWidget {
   const InfinityContinuousReaderMode({
     super.key,
