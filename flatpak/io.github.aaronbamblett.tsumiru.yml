@@ -17,8 +17,32 @@ finish-args:
   - --socket=fallback-x11
   - --device=dri               # GPU-accelerated rendering
   - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.freedesktop.secrets   # libsecret credential store (host keyring)
 
 modules:
+  # flutter_secure_storage_linux needs libsecret + jsoncpp, which aren't in the
+  # freedesktop runtime. Build them against the SDK so they're ABI-compatible.
+  - name: jsoncpp
+    buildsystem: meson
+    config-opts:
+      - -Dtests=false
+    sources:
+      - type: archive
+        url: https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.6.tar.gz
+        sha256: f93b6dd7ce796b13d02c108bc9f79812245a82e577581c4c9aabe57075c90ea2
+
+  - name: libsecret
+    buildsystem: meson
+    config-opts:
+      - -Dmanpage=false
+      - -Dgtk_doc=false
+      - -Dintrospection=false
+      - -Dvapi=false
+    sources:
+      - type: archive
+        url: https://download.gnome.org/sources/libsecret/0.21/libsecret-0.21.7.tar.xz
+        sha256: 6b452e4750590a2b5617adc40026f28d2f4903de15f1250e1d1c40bfd68ed55e
+
   - name: tsumiru
     buildsystem: simple
     build-commands:
