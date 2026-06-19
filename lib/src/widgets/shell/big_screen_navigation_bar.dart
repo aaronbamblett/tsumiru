@@ -20,6 +20,11 @@ class BigScreenNavigationBar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
 
+  /// Width of the extended rail. Set explicitly on the [NavigationRail] below
+  /// AND used to size the [leading] so the header fills the rail and can
+  /// left-align (the rail's Column centers a narrower leading child).
+  static const double _extendedWidth = 256;
+
   NavigationRailDestination getNavigationRailDestination(
       BuildContext context, NavigationBarData data) {
     return NavigationRailDestination(
@@ -33,15 +38,25 @@ class BigScreenNavigationBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final Widget leadingIcon;
     if (context.isDesktop) {
-      leadingIcon = TextButton.icon(
-        onPressed: () => const AboutRoute().go(context),
-        icon: ImageIcon(
-          AssetImage(Assets.icons.darkIcon.path),
-          size: 48,
-        ),
-        label: Text(context.l10n.appTitle),
-        style: TextButton.styleFrom(
-          foregroundColor: context.textTheme.bodyLarge?.color,
+      leadingIcon = SizedBox(
+        width: _extendedWidth,
+        child: Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => const AboutRoute().go(context),
+              icon: ImageIcon(
+                AssetImage(Assets.icons.darkIcon.path),
+                size: 48,
+              ),
+              label: Text(context.l10n.appTitle),
+              style: TextButton.styleFrom(
+                foregroundColor: context.textTheme.bodyLarge?.color,
+                alignment: Alignment.centerLeft,
+              ),
+            ),
+          ),
         ),
       );
     } else {
@@ -58,6 +73,7 @@ class BigScreenNavigationBar extends StatelessWidget {
       useIndicator: true,
       elevation: 5,
       extended: context.isDesktop,
+      minExtendedWidth: _extendedWidth,
       labelType: context.isDesktop
           ? NavigationRailLabelType.none
           : NavigationRailLabelType.all,
