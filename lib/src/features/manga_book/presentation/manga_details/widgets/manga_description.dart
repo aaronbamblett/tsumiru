@@ -161,8 +161,8 @@ class MangaDescription extends HookConsumerWidget {
               runSpacing: 8,
               // alignment: WrapAlignment.spaceBetween,
               children: [
-                ...manga.genre.map<Widget>(
-                  (e) => _GenreChip(e),
+                ...manga.genre.indexed.map<Widget>(
+                  (e) => _GenreChip(e.$2, alt: e.$1.isOdd),
                 )
               ],
             ),
@@ -174,10 +174,10 @@ class MangaDescription extends HookConsumerWidget {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  ...manga.genre.map<Widget>(
+                  ...manga.genre.indexed.map<Widget>(
                     (e) => Padding(
                       padding: KEdgeInsets.h4.size,
-                      child: _GenreChip(e),
+                      child: _GenreChip(e.$2, alt: e.$1.isOdd),
                     ),
                   )
                 ],
@@ -208,16 +208,25 @@ class _CoverBackdrop extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Blurred cover art (blur 14, ~72% — "Immersive" preset).
+            // Blurred + saturated cover art (blur 14, ~85%, saturate 1.4 — so
+            // the comic's own colors glow rather than wash out to grey).
             Opacity(
-              opacity: 0.72,
-              child: ImageFiltered(
-                imageFilter: ImageFilter.blur(
-                  sigmaX: 14,
-                  sigmaY: 14,
-                  tileMode: TileMode.decal,
+              opacity: 0.85,
+              child: ColorFiltered(
+                colorFilter: const ColorFilter.matrix(<double>[
+                  1.31496, -0.28608, -0.02888, 0, 0, //
+                  -0.08504, 1.11392, -0.02888, 0, 0, //
+                  -0.08504, -0.28608, 1.37112, 0, 0, //
+                  0, 0, 0, 1, 0, //
+                ]),
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(
+                    sigmaX: 14,
+                    sigmaY: 14,
+                    tileMode: TileMode.decal,
+                  ),
+                  child: ServerImage(imageUrl: url, fit: BoxFit.cover),
                 ),
-                child: ServerImage(imageUrl: url, fit: BoxFit.cover),
               ),
             ),
             // Indigo→cyan brand tint over the top (55% strength).
@@ -262,23 +271,33 @@ class _CoverBackdrop extends StatelessWidget {
 /// Accent-glass genre chip — translucent primary-tinted fill + accent border,
 /// instead of a stock Material [Chip].
 class _GenreChip extends StatelessWidget {
-  const _GenreChip(this.label);
+  const _GenreChip(this.label, {this.alt = false});
 
   final String label;
+  final bool alt;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    // Alternate indigo (primary) / cyan (secondary) so the chip row is colorful.
+    final accent = alt ? cs.secondary : cs.primary;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
       decoration: BoxDecoration(
-        color: cs.primary.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: cs.primary.withValues(alpha: 0.30)),
+        color: accent.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: accent.withValues(alpha: 0.55)),
+        boxShadow: [
+          BoxShadow(color: accent.withValues(alpha: 0.16), blurRadius: 12),
+        ],
       ),
       child: Text(
         label,
-        style: TextStyle(color: cs.onSurface, fontSize: 13),
+        style: TextStyle(
+          color: accent,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
