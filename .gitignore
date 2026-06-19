@@ -56,3 +56,6 @@ lib/src/l10n/generated
 
 # Design exploration scratch — canonical masters live in design/brand/
 design/icon-concepts/
+
+# local test launcher (contains a password)
+scripts/run-test.sh
