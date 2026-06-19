@@ -1,200 +1,82 @@
 <p align="center">
- <img width=200px height=200px src="assets/icons/launcher/sorayomi_icon.png" alt="Sorayomi logo"/>
+ <img width=120px height=120px src="assets/icons/launcher/sorayomi_icon.png" alt="Tsumiru logo"/>
 </p>
 
-<h1 align="center"> Sorayomi </h1>
+<h1 align="center">Tsumiru</h1>
 
 <div align="center">
 
-[![Platform](https://img.shields.io/badge/platform-Android%20%7C%20iOS%20%7C%20Linux%20%7C%20Windows%20%7C%20MacOS%20%7C%20Web-lightgrey)][release]
-[![Discord](https://img.shields.io/discord/801021177333940224.svg?label=discord&labelColor=7289da&color=2c2f33&style=flat)](https://discord.gg/DDZdqZWaHA)
+[![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Linux%20%7C%20Windows%20%7C%20macOS%20%7C%20Web-lightgrey)](https://github.com/aaronbamblett/tsumiru/releases)
+[![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/aaronbamblett/tsumiru?label=download)](https://github.com/aaronbamblett/tsumiru/releases/latest)
 
 </div>
-
-<div align="center">
-
-[![GitHub Stars](https://img.shields.io/github/stars/Suwayomi/Tachidesk-Sorayomi)](https://github.com/Suwayomi/Tachidesk-Sorayomi)
-[![GitHub License](https://img.shields.io/github/license/Suwayomi/Tachidesk-Sorayomi)](https://github.com/Suwayomi/Tachidesk-Sorayomi/blob/main/LICENSE)
-![CI](https://github.com/Suwayomi/Tachidesk-Sorayomi/actions/workflows/publish.yml/badge.svg)
-[![stable release](https://img.shields.io/github/release/Suwayomi/Tachidesk-Sorayomi.svg?maxAge=3600&label=download)](https://github.com/Suwayomi/Tachidesk-Sorayomi/releases)
-
-</div>
-
-
 
 <p align="center">
-A free and open source manga reader based on <a href="https://flutter.dev/">Flutter</a> to read manga from a <a href="https://github.com/Suwayomi/Tachidesk-Server">Suwayomi-Server</a> instance.</br></br>
-Sorayomi need to connect with an already hosted server.</br></br>
-Sorayomi supports Linux, Windows, MacOS, Web, iOS and Android.
+A polished, native client for reading manga &amp; manhwa from a
+<a href="https://github.com/Suwayomi/Suwayomi-Server">Suwayomi-Server</a> instance —
+built for long webtoon binges on your phone.
 </p>
+
+> **Tsumiru** *(積みる)* — a play on *tsundoku* (積ん読), the art of letting unread
+> books pile up. For everyone whose backlog grows faster than they can read it.
 
 ---
 
-## Is this application usable? Should I test it?
+## What it is
 
-Here is a list of current features for interaction with Sorayomi:
+Tsumiru is an enhanced fork of [Tachidesk-Sorayomi](https://github.com/Suwayomi/Tachidesk-Sorayomi),
+the Flutter client for the self-hosted [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server)
+manga server. It connects to a server you already run — it is a reader, not a server.
 
-- Managing installed Extensions.
-- Interaction with your library.
-- Browsing installed sources.
-- Viewing manga and chapters.
-- Reading, downloading, and managing chapters.
-- Viewing chapter updates
+Runs on **Android, Linux, Windows, macOS, and Web**.
 
-**Note:** Keep in mind that Sorayomi and Suwayomi-Server are alpha software, so it can have issues. See [Support and help](#support-and-help) if it happens.
+## What's different from upstream Sorayomi
 
+This fork focuses on making it a great daily driver, especially for **webtoon / manhwa** reading:
 
-### Supported Suwayomi versions
+- **Rebuilt webtoon reader** — seamless multi-chapter continuous scroll, with the
+  backward-scroll "snap" fixed (pages reserve their measured height so a strip never
+  collapses and yanks you backward).
+- **Pinch-to-zoom that scrolls while zoomed.**
+- **Authentication** — `simple_login` + `ui_login`, secure-storage credentials,
+  proactive token refresh, authenticated GraphQL WebSocket subscriptions.
+- **Library** — sort by last read, Last Chapter Date & Total Chapters sorts,
+  Started/Bookmarked filters, a fixed tri-state filter, and a bulk-download presets menu.
+- **UI fixes** — proper insets above the Android navigation bar, download-tile overflow fix.
 
-These are the versions of [Suwayomi-Server][suwayomi-server] that Sorayomi supports.
+## Download
 
-#### [Release build][release]
+Grab the latest build for your platform from the
+[**Releases**](https://github.com/aaronbamblett/tsumiru/releases/latest) page
+(Android APKs — universal + per-ABI — plus Linux, Windows, macOS, and Web).
 
-- [Suwayomi-Server][suwayomi-server] v0.6.6+
+**Android, with auto-updates:** add this repo to
+[Obtainium](https://github.com/ImranR98/Obtainium) and it will install and keep
+Tsumiru updated straight from GitHub Releases — no app store needed.
 
+## Requirements
 
-## Downloading and Running the app
+You need a running [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server)
+that Tsumiru can reach. On first launch, point it at your server's address.
 
-### Android
+## Building
 
-Download *-android-all.apk file from latest release [the releases section][release].
+Flutter 3.32.4 / Dart 3.8.1 (pinned).
 
-
-### iOS
-
-- Download the latest .ipa file from [the releases section][release]
-- use [AltStore](https://altstore.io/) to install Sorayomi in ios.
-
-### Windows
-
-Download the latest .msi file from [the releases section][release].
-
-if you use WINGET, you can run
-```
-winget install tachidesk-sorayomi
-```
-
-### MacOS
-
-- Download the *-macos-x64.zip from the latest release [the releases section][release]
-- Extract the file.
-- Drag and drop the extracted app file to applications folder in finder.
-
-if you use HomeBrew, you can run
-```
-brew install --cask tachidesk-sorayomi
+```bash
+flutter pub get
+flutter gen-l10n
+dart run build_runner build --delete-conflicting-outputs
+flutter build apk            # or: linux / windows / macos / web
 ```
 
-### Debian based Linux
+## Credits & license
 
-Download the latest deb release from [the releases section][release].
+Tsumiru stands on the work of the [Suwayomi](https://github.com/Suwayomi) project:
+[Tachidesk-Sorayomi](https://github.com/Suwayomi/Tachidesk-Sorayomi) (the client this
+forks) and [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server) (the server it
+talks to). Huge thanks to those maintainers and contributors.
 
-### Arch based Linux
-
-Download the latest release from [the aur](https://aur.archlinux.org/packages/tachidesk-sorayomi-bin).
-
-If you use yay, you can run
-```
-yay -S tachidesk-sorayomi-bin
-```
-inside a terminal window.
-
-### Web
-
-Download the latest web.zip file from [the releases section][release].
-
-- Sorayomi-web deployed in GitHub pages. You can check out [Sorayomi here](https://suwayomi.github.io/Tachidesk-Sorayomi/).
-
-
-## Post installation
-
-  - Configure your server address in `Navigation bar > more screen > Server URL`.
-
-## Building from source
-
-These instructions will get you a copy of the project up and running on your local machine for development and testing purposes.
-
-### Prerequisites
-
-You can install Flutter & Dart from [Official website](https://docs.flutter.dev/get-started/install)
-
-  - Dart sdk
-  - Flutter - Channel Stable
-
-### Building
-
-1.  Clone the repository:
-
-```
-  $ git clone https://github.com/Suwayomi/Tachidesk-Sorayomi.git
-  $ cd Tachidesk-Sorayomi/
-```
-2.  You can install all dependencies by running this command in terminal:
-
-```
-  $ flutter pub get
-```
-
-3.  Now enter the following command to start debugging the app:
-
-```
-  $ flutter run
-```
-
--  Localization generator
-```
-  $ flutter gen-l10n
-```
-
-- Pull-Request Suggestion
-  - Install GitHooks after cloning the repo using `git config --local core.hooksPath .githooks`
-
-## Support and help
-
--   Join Suwayomi's [discord server](https://discord.gg/DDZdqZWaHA) to hang out with the community and receive support and help.
-
-
-## Built Using
-
-- [Flutter](https://flutter.dev/) is an open source framework by Google for building beautiful, natively compiled, multi-platform applications from a single codebase.
-
-- [Flutter Riverpod](https://pub.dev/packages/riverpod/) - A simple way to access state while robust and testable.
-
-- [Riverpod Architecture](https://codewithandrea.com/articles/flutter-app-architecture-riverpod-introduction/) - File architecture developed by [@bizz84](https://github.com/bizz84)
-
-Find other dependencies in [pubspec.yaml](pubspec.yaml)
-
-## Credit
-
-- The `Suwayomi-server` project is developed by [@AriaMoradi](https://github.com/AriaMoradi) and contributors,
-
-- The `Tachidesk-Sorayomi` project is developed by [@DattatreyaReddy](https://github.com/DattatreyaReddy) and contributors,
-
-- CI-CD for `Tachidesk-Sorayomi` is developed by [@mahor1221](https://github.com/mahor1221) and contributors.
-
-## Translation
-Feel free to translate the project on [Weblate](https://hosted.weblate.org/projects/suwayomi/tachidesk-sorayomi/)
-
-<details><summary>Translation Progress</summary>
-<a href="https://hosted.weblate.org/engage/suwayomi/">
-<img src="https://hosted.weblate.org/widgets/suwayomi/-/tachidesk-sorayomi/multi-auto.svg" alt="Translation status" />
-</a>
-</details>
-
-## License
-
-A link for [Tachidesk is provided here](https://github.com/Suwayomi/Tachidesk) and is licensed under `Mozilla Public License v2.0`.
-
-You can obtain a copy of `Mozilla Public License v2.0` from https://mozilla.org/MPL/2.0/
-
-
-    Copyright (C) Contributors to the Suwayomi project
-
-    This Source Code Form is subject to the terms of the Mozilla Public
-    License, v. 2.0. If a copy of the MPL was not distributed with this
-    file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
-
-[release]: https://github.com/Suwayomi/Tachidesk-Sorayomi/releases
-[suwayomi-server]: https://github.com/Suwayomi/Suwayomi-Server
-[suwayomi-server-preview]: https://github.com/Suwayomi/Suwayomi-Server-preview/releases
+Licensed under the **Mozilla Public License 2.0** — see [LICENSE](LICENSE). As with the
+upstream project, source files retain their MPL-2.0 headers.
