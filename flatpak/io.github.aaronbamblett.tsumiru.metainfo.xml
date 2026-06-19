@@ -28,6 +28,11 @@
   <url type="help">https://tsumiru-app.github.io/docs/guides/getting-started</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.1" date="2026-06-19">
+      <description>
+        <p>Linux Flatpak + AppImage, full Tsumiru branding in-app, and a fixed update check.</p>
+      </description>
+    </release>
     <release version="0.4.0" date="2026-06-19">
       <description>
         <p>First Tsumiru release: rebuilt webtoon reader, multiplatform builds, server authentication, and a flexible library.</p>
