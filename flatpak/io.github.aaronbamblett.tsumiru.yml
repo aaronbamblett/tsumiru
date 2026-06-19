@@ -1,0 +1,37 @@
+# Flatpak manifest for Tsumiru.
+#
+# Packages a PRE-BUILT `flutter build linux` bundle (flatpak-builder runs
+# offline, so Flutter is built outside the sandbox in CI and the bundle is
+# dropped in here). CI is expected to place the bundle at ./bundle before
+# running flatpak-builder against this manifest (see the release workflow).
+app-id: io.github.aaronbamblett.tsumiru
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: tsumiru
+
+finish-args:
+  - --share=ipc
+  - --share=network            # talks to the user's Suwayomi server
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri               # GPU-accelerated rendering
+  - --talk-name=org.freedesktop.Notifications
+
+modules:
+  - name: tsumiru
+    buildsystem: simple
+    build-commands:
+      # App bundle → /app/tsumiru, with the binary linked onto PATH.
+      - mkdir -p /app/tsumiru
+      - cp -r bundle/* /app/tsumiru/
+      - mkdir -p /app/bin
+      - ln -s /app/tsumiru/tsumiru /app/bin/tsumiru
+      # Desktop integration metadata.
+      - install -Dm644 io.github.aaronbamblett.tsumiru.desktop /app/share/applications/io.github.aaronbamblett.tsumiru.desktop
+      - install -Dm644 io.github.aaronbamblett.tsumiru.metainfo.xml /app/share/metainfo/io.github.aaronbamblett.tsumiru.metainfo.xml
+      - install -Dm644 io.github.aaronbamblett.tsumiru.png /app/share/icons/hicolor/512x512/apps/io.github.aaronbamblett.tsumiru.png
+    sources:
+      # This dir — packaging files plus the CI-placed ./bundle (the Flutter build).
+      - type: dir
+        path: .
