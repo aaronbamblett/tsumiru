@@ -24,3 +24,16 @@ ColorScheme schemeFromTokens(ThemeTokens t, Brightness brightness) {
     error: t.danger,
   );
 }
+
+/// Layers AMOLED pure-black on a DARK [ColorScheme]: backgrounds → black,
+/// elevated containers → stepped near-black. Accents and on-colors unchanged.
+ColorScheme applyAmoled(ColorScheme dark) {
+  return dark.copyWith(
+    surface: const Color(0xFF000000),
+    surfaceContainerLowest: const Color(0xFF000000),
+    surfaceContainerLow: const Color(0xFF0A0A0A),
+    surfaceContainer: const Color(0xFF101010),
+    surfaceContainerHigh: const Color(0xFF161616),
+    surfaceContainerHighest: const Color(0xFF1C1C1C),
+  );
+}

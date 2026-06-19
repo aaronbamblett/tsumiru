@@ -23,4 +23,14 @@ void main() {
     expect(scheme.brightness, Brightness.light);
     expect(scheme.surface, const Color(0xFFF6FFFB));
   });
+
+  test('amoled forces surface to true black, preserves primary', () {
+    final dark =
+        schemeFromTokens(tokensFor(AppTheme.indigoNight, Brightness.dark), Brightness.dark);
+    final amoled = applyAmoled(dark);
+    expect(amoled.surface, const Color(0xFF000000));
+    expect(amoled.surfaceContainerLowest, const Color(0xFF000000));
+    expect(amoled.primary, dark.primary); // accent preserved
+    expect(amoled.onSurface, dark.onSurface);
+  });
 }
