@@ -161,8 +161,8 @@ class MangaDescription extends HookConsumerWidget {
               runSpacing: 8,
               // alignment: WrapAlignment.spaceBetween,
               children: [
-                ...manga.genre.indexed.map<Widget>(
-                  (e) => _GenreChip(e.$2, alt: e.$1.isOdd),
+                ...manga.genre.map<Widget>(
+                  (e) => _GenreChip(e),
                 )
               ],
             ),
@@ -174,10 +174,10 @@ class MangaDescription extends HookConsumerWidget {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  ...manga.genre.indexed.map<Widget>(
+                  ...manga.genre.map<Widget>(
                     (e) => Padding(
                       padding: KEdgeInsets.h4.size,
-                      child: _GenreChip(e.$2, alt: e.$1.isOdd),
+                      child: _GenreChip(e),
                     ),
                   )
                 ],
@@ -270,17 +270,38 @@ class _CoverBackdrop extends StatelessWidget {
 
 /// Accent-glass genre chip — translucent primary-tinted fill + accent border,
 /// instead of a stock Material [Chip].
+/// On-brand palette for per-genre coloring — vivid but dark-theme-friendly.
+const _genrePalette = <Color>[
+  Color(0xFF7C7BFF), // indigo
+  Color(0xFF33D6FF), // cyan
+  Color(0xFF34E0A1), // mint
+  Color(0xFFFFCF5C), // amber
+  Color(0xFFFF5DB1), // pink
+  Color(0xFFB06BFF), // purple
+  Color(0xFF2DD4BF), // teal
+  Color(0xFFFF9F5C), // orange
+  Color(0xFF5B9BFF), // blue
+  Color(0xFFFF6B6B), // coral
+];
+
+/// Stable per-genre color: the same genre always maps to the same hue.
+Color _genreColor(String s) {
+  var h = 0;
+  for (final c in s.codeUnits) {
+    h = (h * 31 + c) & 0x7fffffff;
+  }
+  return _genrePalette[h % _genrePalette.length];
+}
+
 class _GenreChip extends StatelessWidget {
-  const _GenreChip(this.label, {this.alt = false});
+  const _GenreChip(this.label);
 
   final String label;
-  final bool alt;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    // Alternate indigo (primary) / cyan (secondary) so the chip row is colorful.
-    final accent = alt ? cs.secondary : cs.primary;
+    // Each genre gets its own stable color.
+    final accent = _genreColor(label);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
       decoration: BoxDecoration(
