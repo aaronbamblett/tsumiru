@@ -52,7 +52,6 @@ class BrowseScreen extends HookConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(context.l10n.browse),
-        centerTitle: true,
         actions: [
           IconButton(
             onPressed: () => showSearch.value = (true),

@@ -53,7 +53,6 @@ class LibraryScreen extends HookConsumerWidget {
                 min(categoryId.getValueOnNullOrNegative(), data.length - 1),
             child: Scaffold(
               appBar: AppBar(
-                centerTitle: true,
                 title: !showSearch.value
                     ? Text(context.l10n.library)
                     : SearchField(
@@ -154,7 +153,6 @@ class LibraryScreen extends HookConsumerWidget {
       wrapper: (body) => Scaffold(
         appBar: AppBar(
           title: Text(context.l10n.library),
-          centerTitle: true,
         ),
         body: body,
       ),

@@ -44,6 +44,7 @@ class Sorayomi extends ConsumerWidget {
           useMaterial3: true,
           useMaterial3ErrorColors: true,
         ).copyWith(
+          appBarTheme: const AppBarTheme(centerTitle: false),
           tabBarTheme: const TabBarThemeData(tabAlignment: TabAlignment.center),
         ),
         darkTheme: FlexThemeData.dark(
@@ -52,6 +53,7 @@ class Sorayomi extends ConsumerWidget {
           useMaterial3ErrorColors: true,
           darkIsTrueBlack: isTrueBlack.ifNull(),
         ).copyWith(
+          appBarTheme: const AppBarTheme(centerTitle: false),
           tabBarTheme: const TabBarThemeData(tabAlignment: TabAlignment.center),
         ),
         themeMode: themeMode ?? ThemeMode.system,
