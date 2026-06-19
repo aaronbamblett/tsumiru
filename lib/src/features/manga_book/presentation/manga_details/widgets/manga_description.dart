@@ -16,7 +16,7 @@ import '../../../../../routes/router_config.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../utils/launch_url_in_web.dart';
 import '../../../../../utils/misc/toast/toast.dart';
-import '../../../../../widgets/async_buttons/async_text_button_icon.dart';
+import '../../../../../widgets/gradient_pill_button.dart';
 import '../../../../../widgets/manga_cover/list/manga_cover_descriptive_list_tile.dart';
 import '../../../../../widgets/server_image.dart';
 import '../../../domain/manga/manga_model.dart';
@@ -57,47 +57,50 @@ class MangaDescription extends HookConsumerWidget {
                         GlobalSearchRoute(query: query).push(context),
                   ),
                   Padding(
-                    padding: const EdgeInsets.all(8.0),
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        AsyncTextButtonIcon(
-                          onPressed: () async {
-                            final val = await AsyncValue.guard(() async {
-                              if (manga.inLibrary.ifNull()) {
-                                await removeMangaFromLibrary();
-                              } else {
-                                await addMangaToLibrary();
-                              }
-                              await refresh();
-                            });
-                            if (context.mounted) {
-                              val.showToastOnError(ref.read(toastProvider));
-                            }
-                          },
-                          isPrimary: manga.inLibrary.ifNull(),
-                          primaryIcon: const Icon(Icons.favorite_rounded),
-                          secondaryIcon:
-                              const Icon(Icons.favorite_border_outlined),
-                          secondaryStyle: TextButton.styleFrom(
-                              foregroundColor: Colors.grey),
-                          primaryLabel: Text(context.l10n.inLibrary),
-                          secondaryLabel: Text(context.l10n.addToLibrary),
-                        ),
-                        if (manga.realUrl.isNotBlank)
-                          TextButton.icon(
+                        Expanded(
+                          child: GradientButton(
+                            icon: Icon(
+                              manga.inLibrary.ifNull()
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_border_rounded,
+                            ),
+                            label: Text(
+                              manga.inLibrary.ifNull()
+                                  ? context.l10n.inLibrary
+                                  : context.l10n.addToLibrary,
+                            ),
                             onPressed: () async {
-                              launchUrlInWeb(
+                              final val = await AsyncValue.guard(() async {
+                                if (manga.inLibrary.ifNull()) {
+                                  await removeMangaFromLibrary();
+                                } else {
+                                  await addMangaToLibrary();
+                                }
+                                await refresh();
+                              });
+                              if (context.mounted) {
+                                val.showToastOnError(ref.read(toastProvider));
+                              }
+                            },
+                          ),
+                        ),
+                        if (manga.realUrl.isNotBlank) ...[
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: GlassButton(
+                              icon: const Icon(Icons.public_rounded),
+                              label: Text(context.l10n.webView),
+                              onPressed: () => launchUrlInWeb(
                                 context,
                                 (manga.realUrl ?? ""),
                                 ref.read(toastProvider),
-                              );
-                            },
-                            icon: const Icon(Icons.public_rounded),
-                            style: TextButton.styleFrom(
-                                foregroundColor: Colors.grey),
-                            label: Text(context.l10n.webView),
+                              ),
+                            ),
                           ),
+                        ],
                       ],
                     ),
                   ),
@@ -198,21 +201,38 @@ class _CoverBackdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     final url = manga.thumbnailUrl ?? '';
     if (url.isEmpty) return const SizedBox.shrink();
-    final surface = Theme.of(context).colorScheme.surface;
+    final cs = Theme.of(context).colorScheme;
+    final surface = cs.surface;
     return IgnorePointer(
       child: ClipRect(
         child: Stack(
           fit: StackFit.expand,
           children: [
+            // Blurred cover art (blur 14, ~72% — "Immersive" preset).
             Opacity(
-              opacity: 0.6,
+              opacity: 0.72,
               child: ImageFiltered(
                 imageFilter: ImageFilter.blur(
-                  sigmaX: 20,
-                  sigmaY: 20,
+                  sigmaX: 14,
+                  sigmaY: 14,
                   tileMode: TileMode.decal,
                 ),
                 child: ServerImage(imageUrl: url, fit: BoxFit.cover),
+              ),
+            ),
+            // Indigo→cyan brand tint over the top (55% strength).
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    cs.primary.withValues(alpha: 0.22),
+                    cs.secondary.withValues(alpha: 0.06),
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.5, 0.72],
+                ),
               ),
             ),
             // Fade the blurred cover into the page surface lower down so it
@@ -224,11 +244,11 @@ class _CoverBackdrop extends StatelessWidget {
                   end: Alignment.bottomCenter,
                   colors: [
                     surface.withValues(alpha: 0.0),
-                    surface.withValues(alpha: 0.15),
+                    surface.withValues(alpha: 0.10),
                     surface.withValues(alpha: 0.85),
                     surface,
                   ],
-                  stops: const [0.0, 0.4, 0.82, 1.0],
+                  stops: const [0.0, 0.45, 0.85, 1.0],
                 ),
               ),
             ),
