@@ -28,7 +28,12 @@ class ThemeSelector extends HookConsumerWidget {
             controller: controller,
             scrollDirection: Axis.horizontal,
             children: [
-              for (final theme in AppTheme.values)
+              // Named themes first, Custom last (custom sits mid-enum because
+              // values are persisted by index — display order is independent).
+              for (final theme in [
+                ...AppTheme.values.where((t) => t != AppTheme.custom),
+                AppTheme.custom,
+              ])
                 _ThemeCard(
                   theme: theme,
                   selected: theme == selected,
