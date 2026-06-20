@@ -168,6 +168,11 @@ class MangaDetailsScreen extends HookConsumerWidget {
                     builder: (context, px, _) {
                       final t = (px / 160).clamp(0.0, 1.0);
                       return AppBar(
+                        // Explicit back button: wrapping the AppBar in a
+                        // builder defeats automaticallyImplyLeading.
+                        leading: Navigator.of(context).canPop()
+                            ? const BackButton()
+                            : null,
                         backgroundColor:
                             Color.lerp(Colors.transparent, surface, t),
                         elevation: 0,
