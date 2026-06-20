@@ -70,7 +70,12 @@ class BrandPageSeekBar extends StatelessWidget {
               : null,
           child: CustomPaint(
             size: Size.infinite,
-            painter: _SeekPainter(axis: axis, fill: fill, scheme: cs),
+            painter: _SeekPainter(
+              axis: axis,
+              fill: fill,
+              scheme: cs,
+              count: maxValue,
+            ),
           ),
         );
       },
@@ -110,58 +115,86 @@ class BrandPageSeekBar extends StatelessWidget {
 }
 
 class _SeekPainter extends CustomPainter {
-  _SeekPainter({required this.axis, required this.fill, required this.scheme});
+  _SeekPainter({
+    required this.axis,
+    required this.fill,
+    required this.scheme,
+    required this.count,
+  });
 
   final Axis axis;
   final double fill;
   final ColorScheme scheme;
 
+  /// Page count — one tick dot per page (Komikku style).
+  final int count;
+
   @override
   void paint(Canvas canvas, Size size) {
-    const t = 6.0;
+    const t = 5.0;
     final radius = Radius.circular(t / 2);
+    final horizontal = axis == Axis.horizontal;
+    final length = horizontal ? size.width : size.height;
+    final cross = horizontal ? size.height / 2 : size.width / 2;
 
-    late final Rect track;
-    late final Rect filled;
-    late final Offset thumb;
-    if (axis == Axis.horizontal) {
-      final cy = size.height / 2;
-      track = Rect.fromLTWH(0, cy - t / 2, size.width, t);
-      filled = Rect.fromLTWH(0, cy - t / 2, size.width * fill, t);
-      thumb = Offset(size.width * fill, cy);
-    } else {
-      final cx = size.width / 2;
-      track = Rect.fromLTWH(cx - t / 2, 0, t, size.height);
-      filled = Rect.fromLTWH(cx - t / 2, 0, t, size.height * fill);
-      thumb = Offset(cx, size.height * fill);
-    }
+    Rect bar(double from, double to) => horizontal
+        ? Rect.fromLTRB(from, cross - t / 2, to, cross + t / 2)
+        : Rect.fromLTRB(cross - t / 2, from, cross + t / 2, to);
+    Offset along(double d) =>
+        horizontal ? Offset(d, cross) : Offset(cross, d);
 
     // Track.
     canvas.drawRRect(
-      RRect.fromRectAndRadius(track, radius),
+      RRect.fromRectAndRadius(bar(0, length), radius),
       Paint()..color = scheme.onSurface.withValues(alpha: 0.16),
     );
 
-    // Gradient fill.
-    if (filled.width > 0 && filled.height > 0) {
+    // Gradient fill up to the current position.
+    final fillEnd = (length * fill).clamp(0.0, length);
+    if (fillEnd > 0.5) {
+      final filled = bar(0, fillEnd);
       canvas.drawRRect(
         RRect.fromRectAndRadius(filled, radius),
         Paint()..shader = brandGradient(scheme).createShader(filled),
       );
     }
 
-    // Thumb glow + knob.
-    canvas.drawCircle(
-      thumb,
-      10,
+    // Per-page tick dots — skip when too dense to stay clean.
+    if (count > 1 && count <= 80) {
+      final dot = Paint()..color = scheme.onSurface.withValues(alpha: 0.45);
+      for (var i = 0; i < count; i++) {
+        canvas.drawCircle(along(length * (i / (count - 1))), 1.4, dot);
+      }
+    }
+
+    // Thin line marker at the current position (perpendicular to the bar).
+    final pos = length * fill;
+    const half = 11.0;
+    final p1 = horizontal ? Offset(pos, cross - half) : Offset(cross - half, pos);
+    final p2 = horizontal ? Offset(pos, cross + half) : Offset(cross + half, pos);
+    canvas.drawLine(
+      p1,
+      p2,
       Paint()
-        ..color = scheme.primary.withValues(alpha: 0.45)
-        ..maskFilter = const ui.MaskFilter.blur(BlurStyle.normal, 6),
+        ..color = scheme.primary.withValues(alpha: 0.5)
+        ..strokeWidth = 6
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const ui.MaskFilter.blur(BlurStyle.normal, 4),
     );
-    canvas.drawCircle(thumb, 7, Paint()..color = Colors.white);
+    canvas.drawLine(
+      p1,
+      p2,
+      Paint()
+        ..color = Colors.white
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round,
+    );
   }
 
   @override
   bool shouldRepaint(_SeekPainter old) =>
-      old.fill != fill || old.axis != axis || old.scheme != scheme;
+      old.fill != fill ||
+      old.axis != axis ||
+      old.scheme != scheme ||
+      old.count != count;
 }

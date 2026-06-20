@@ -351,6 +351,10 @@ class ReaderWrapper extends HookConsumerWidget {
                         )
                       : null,
                 ),
+                // Translucent so the page art shows through (Komikku-style).
+                backgroundColor: context
+                    .theme.appBarTheme.backgroundColor
+                    ?.withValues(alpha: 0.55),
                 elevation: 0,
                 actions: [
                   chapter.realUrl.isBlank
@@ -436,7 +440,10 @@ class ReaderWrapper extends HookConsumerWidget {
                   children: [
                     Row(
                       children: [
-                        Card(
+                        // Chapter prev/next arrows are a manga (horizontal)
+                        // gesture; in webtoon you flow via scroll/infinite.
+                        if (scrollDirection == Axis.horizontal)
+                          Card(
                           shape: const CircleBorder(),
                           child: IconButton(
                             onPressed: nextPrevChapterPair?.second != null
@@ -473,7 +480,8 @@ class ReaderWrapper extends HookConsumerWidget {
                                   ),
                                 ),
                         ),
-                        Card(
+                        if (scrollDirection == Axis.horizontal)
+                          Card(
                           shape: const CircleBorder(),
                           child: IconButton(
                             onPressed: nextPrevChapterPair?.first != null
@@ -492,6 +500,8 @@ class ReaderWrapper extends HookConsumerWidget {
                     ),
                     const Gap(8),
                     Card(
+                      // Translucent bottom bar (Komikku-style).
+                      color: context.theme.cardColor.withValues(alpha: 0.7),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.vertical(
                           top: KRadius.r8.radius,
@@ -620,15 +630,46 @@ class ReaderWrapper extends HookConsumerWidget {
             if (scrollDirection == Axis.vertical && visibility.value)
               Positioned(
                 right: 6,
-                top: 88,
-                bottom: 96,
+                top: 80,
+                // Clear the bottom controls so they never overlap the bar.
+                bottom: 150,
                 width: 56,
-                child: BrandPageSeekBar(
-                  currentValue: currentIndex,
-                  maxValue:
-                      totalPageCount ?? chapterPages.chapter.pageCount,
-                  onChanged: (index) => onChanged(index),
-                  axis: Axis.vertical,
+                child: Column(
+                  children: [
+                    // Jump to the start of this chapter.
+                    Card(
+                      shape: const CircleBorder(),
+                      child: IconButton(
+                        iconSize: 20,
+                        icon: const Icon(Icons.vertical_align_top_rounded),
+                        onPressed: () => onChanged(0),
+                      ),
+                    ),
+                    const Gap(6),
+                    Expanded(
+                      child: BrandPageSeekBar(
+                        currentValue: currentIndex,
+                        maxValue:
+                            totalPageCount ?? chapterPages.chapter.pageCount,
+                        onChanged: (index) => onChanged(index),
+                        axis: Axis.vertical,
+                      ),
+                    ),
+                    const Gap(6),
+                    // Jump to the end of this chapter.
+                    Card(
+                      shape: const CircleBorder(),
+                      child: IconButton(
+                        iconSize: 20,
+                        icon: const Icon(Icons.vertical_align_bottom_rounded),
+                        onPressed: () => onChanged(
+                          (totalPageCount ??
+                                  chapterPages.chapter.pageCount) -
+                              1,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
           ],
