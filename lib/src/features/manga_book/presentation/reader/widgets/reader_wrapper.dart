@@ -23,6 +23,7 @@ import '../../../../../routes/router_config.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../utils/launch_url_in_web.dart';
 import '../../../../../utils/misc/toast/toast.dart';
+import '../../../../../utils/theme/brand.dart';
 import '../../../../../widgets/popup_widgets/radio_list_popup.dart';
 import '../../../../settings/presentation/reader/widgets/reader_initial_overlay_tile/reader_initial_overlay_tile.dart';
 import '../../../../settings/presentation/reader/widgets/reader_invert_tap_tile/reader_invert_tap_tile.dart';
@@ -633,19 +634,15 @@ class ReaderWrapper extends HookConsumerWidget {
                 top: 80,
                 // Clear the bottom controls so they never overlap the bar.
                 bottom: 150,
-                width: 56,
+                width: 66,
                 child: Column(
                   children: [
                     // Jump to the start of this chapter.
-                    Card(
-                      shape: const CircleBorder(),
-                      child: IconButton(
-                        iconSize: 20,
-                        icon: const Icon(Icons.vertical_align_top_rounded),
-                        onPressed: () => onChanged(0),
-                      ),
+                    BrandCircleButton(
+                      icon: Icons.vertical_align_top_rounded,
+                      onPressed: () => onChanged(0),
                     ),
-                    const Gap(6),
+                    const Gap(8),
                     Expanded(
                       child: BrandPageSeekBar(
                         currentValue: currentIndex,
@@ -655,18 +652,12 @@ class ReaderWrapper extends HookConsumerWidget {
                         axis: Axis.vertical,
                       ),
                     ),
-                    const Gap(6),
+                    const Gap(8),
                     // Jump to the end of this chapter.
-                    Card(
-                      shape: const CircleBorder(),
-                      child: IconButton(
-                        iconSize: 20,
-                        icon: const Icon(Icons.vertical_align_bottom_rounded),
-                        onPressed: () => onChanged(
-                          (totalPageCount ??
-                                  chapterPages.chapter.pageCount) -
-                              1,
-                        ),
+                    BrandCircleButton(
+                      icon: Icons.vertical_align_bottom_rounded,
+                      onPressed: () => onChanged(
+                        (totalPageCount ?? chapterPages.chapter.pageCount) - 1,
                       ),
                     ),
                   ],

@@ -83,7 +83,7 @@ class BrandPageSeekBar extends StatelessWidget {
 
     final current = Text("${(currentValue + 1).clamp(1, maxValue)}");
     final total = Text("$maxValue");
-    const thickness = 28.0;
+    const thickness = 40.0;
 
     final content = axis == Axis.horizontal
         ? Row(
@@ -131,7 +131,7 @@ class _SeekPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const t = 5.0;
+    const t = 9.0;
     final radius = Radius.circular(t / 2);
     final horizontal = axis == Axis.horizontal;
     final length = horizontal ? size.width : size.height;
@@ -161,15 +161,15 @@ class _SeekPainter extends CustomPainter {
 
     // Per-page tick dots — skip when too dense to stay clean.
     if (count > 1 && count <= 80) {
-      final dot = Paint()..color = scheme.onSurface.withValues(alpha: 0.45);
+      final dot = Paint()..color = scheme.onSurface.withValues(alpha: 0.5);
       for (var i = 0; i < count; i++) {
-        canvas.drawCircle(along(length * (i / (count - 1))), 1.4, dot);
+        canvas.drawCircle(along(length * (i / (count - 1))), 2.2, dot);
       }
     }
 
-    // Thin line marker at the current position (perpendicular to the bar).
+    // Line marker at the current position (perpendicular to the bar).
     final pos = length * fill;
-    const half = 11.0;
+    const half = 16.0;
     final p1 = horizontal ? Offset(pos, cross - half) : Offset(cross - half, pos);
     final p2 = horizontal ? Offset(pos, cross + half) : Offset(cross + half, pos);
     canvas.drawLine(
@@ -177,16 +177,16 @@ class _SeekPainter extends CustomPainter {
       p2,
       Paint()
         ..color = scheme.primary.withValues(alpha: 0.5)
-        ..strokeWidth = 6
+        ..strokeWidth = 9
         ..strokeCap = StrokeCap.round
-        ..maskFilter = const ui.MaskFilter.blur(BlurStyle.normal, 4),
+        ..maskFilter = const ui.MaskFilter.blur(BlurStyle.normal, 5),
     );
     canvas.drawLine(
       p1,
       p2,
       Paint()
         ..color = Colors.white
-        ..strokeWidth = 3
+        ..strokeWidth = 4
         ..strokeCap = StrokeCap.round,
     );
   }

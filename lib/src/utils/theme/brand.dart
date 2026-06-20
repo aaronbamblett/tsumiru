@@ -190,6 +190,46 @@ class BrandGlassButton extends StatelessWidget {
   }
 }
 
+/// Small circular brand-gradient button — gradient fill + glow + dark glyph.
+/// Single source for round brand actions (reader chapter-end jumps, etc.).
+class BrandCircleButton extends StatelessWidget {
+  const BrandCircleButton({
+    super.key,
+    required this.icon,
+    required this.onPressed,
+    this.size = 42,
+  });
+
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: brandGradient(cs),
+        boxShadow: brandGlow(cs),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPressed,
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Icon(icon, size: size * 0.52, color: onBrandGradient),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Genre / tag chip — glass fill tinted with a UNIQUE per-label color
 /// (hue derived from the label, so every genre is visually distinct).
 class BrandChip extends StatelessWidget {
