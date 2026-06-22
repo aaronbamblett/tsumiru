@@ -119,6 +119,13 @@ class OfflineDownloadCoordinator {
       );
 
       if (outcome.cancelled) return; // leave partial; resume later
+      if (outcome.offline) {
+        // No network / Wi-Fi-only blocked it — leave the chapter `downloading`
+        // so it resumes on reconnect, NOT `error`.
+        logger.i('Offline: chapter ${chapter.id} paused (no network); '
+            'leaving downloading for resume');
+        return;
+      }
       if (outcome.authFailed) {
         logger.e('Offline: chapter ${chapter.id} auth failed (token dead)');
         await db.setChapterDeviceState(chapter.id, OfflineDeviceState.error);
