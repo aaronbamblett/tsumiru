@@ -189,6 +189,12 @@ class DownloadTaskHandler extends TaskHandler {
       return;
     }
 
+    // Tell the UI this chapter is now downloading, so the live progress arc
+    // shows while the app is in the foreground (the main isolate applies it to
+    // the catalog; while backgrounded it's dropped and the log replay covers it).
+    FlutterForegroundTask.sendDataToMain(
+        {'kind': 'chapterStart', 'chapterId': chapterId});
+
     final engine = _buildEngine();
     final pages = [
       for (var i = 0; i < urls.length; i++) (index: i, url: urls[i]),
@@ -198,13 +204,23 @@ class DownloadTaskHandler extends TaskHandler {
       chapterId: chapterId,
       pages: pages,
       isCancelled: () => _cancelled.contains(chapterId) || _stopping,
-      onPageStored: (i, rel, bytes) => _log.appendPage(
-        chapterId: chapterId,
-        mangaId: mangaId,
-        pageIndex: i,
-        relPath: rel,
-        bytes: bytes,
-      ),
+      onPageStored: (i, rel, bytes) {
+        // Live per-page progress for the foreground UI (drift row applied by the
+        // main isolate). The durable record is still the completion log.
+        FlutterForegroundTask.sendDataToMain({
+          'kind': 'page',
+          'chapterId': chapterId,
+          'pageIndex': i,
+          'relPath': rel,
+        });
+        return _log.appendPage(
+          chapterId: chapterId,
+          mangaId: mangaId,
+          pageIndex: i,
+          relPath: rel,
+          bytes: bytes,
+        );
+      },
     );
 
     final String? status = outcome.succeeded

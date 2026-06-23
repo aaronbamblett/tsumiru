@@ -217,8 +217,24 @@ class BackgroundDownloadController with WidgetsBindingObserver {
 
   void _onWorkerEvent(Object data) {
     if (data is! Map) return;
-    if (data['kind'] == 'chapterDone') {
-      unawaited(_onChapterDone(data));
+    switch (data['kind']) {
+      // Live foreground UI: mark the chapter downloading + accumulate page rows
+      // as the worker reports them, so the per-chapter progress arc animates.
+      // (Only meaningful while the app is foreground; the durable record is the
+      // completion log, replayed on resume.)
+      case 'chapterStart':
+        unawaited(_db.setChapterDeviceState(
+            data['chapterId'] as int, OfflineDeviceState.downloading));
+      case 'page':
+        unawaited(_db.into(_db.offlinePages).insertOnConflictUpdate(
+              OfflinePagesCompanion.insert(
+                chapterId: data['chapterId'] as int,
+                pageIndex: data['pageIndex'] as int,
+                relativePath: data['relPath'] as String,
+              ),
+            ));
+      case 'chapterDone':
+        unawaited(_onChapterDone(data));
     }
   }
 
