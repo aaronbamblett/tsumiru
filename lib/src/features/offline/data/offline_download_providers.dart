@@ -39,6 +39,23 @@ part 'offline_download_providers.g.dart';
 /// downloads (web-safe + correct in unit tests — see [isAndroidNative]).
 bool get _useBgService => isAndroidNative;
 
+/// THE single entry point that kicks off downloading after chapters have been
+/// queued into drift. EVERY download trigger must call this — on Android it
+/// starts the foreground-service worker, elsewhere it drains via the
+/// main-isolate pump. Centralised (and overridable in tests) so no trigger can
+/// ever again silently rely on the Android-disabled pump.
+final downloadStarterProvider = Provider<Future<void> Function()>((ref) {
+  return () async {
+    if (isAndroidNative) {
+      await ref
+          .read(backgroundDownloadControllerProvider)
+          .ensureServiceRunning();
+    } else {
+      await ref.read(offlineDownloadCoordinatorProvider)?.pumpDownloads();
+    }
+  };
+});
+
 /// Live on-device download state for a chapter (none / queued / downloading /
 /// downloaded / error). Always `none` when offline is unavailable.
 @riverpod
@@ -97,11 +114,7 @@ Future<void> saveChapterToDevice(WidgetRef ref, int chapterId) async {
   // foreground-service worker owns the downloading; elsewhere the main-isolate
   // pump drains it.
   await coordinator.queueChapter(chapterId);
-  if (_useBgService) {
-    await ref.read(backgroundDownloadControllerProvider).onEnqueued([chapterId]);
-  } else {
-    await coordinator.pumpDownloads();
-  }
+  await ref.read(downloadStarterProvider)();
 }
 
 /// Record reading progress for a chapter. Persists it to the on-device catalog
@@ -366,10 +379,10 @@ Future<void> reconcileMangaCore({
     db: db,
     nets: nets,
     now: DateTime.now(),
-    // Only QUEUE chapters here (mark them in the persistent backlog); the pump
-    // below starts them one at a time. This keeps the fragile in-memory holding
-    // queue down to a single chapter, so an app restart can't strand the whole
-    // library as "downloading". One failed queue-mark must NOT abort the rest.
+    // Only QUEUE chapters here (mark them in the persistent backlog). Starting
+    // the download is the caller's job (via downloadStarterProvider) — this core
+    // must NOT start anything itself, so the Ref-less launch path and tests stay
+    // in control. One failed queue-mark must NOT abort the rest.
     onDownload: (id) async {
       try {
         await coordinator.queueChapter(id);
@@ -385,7 +398,7 @@ Future<void> reconcileMangaCore({
         logger.e('Offline: reconcile evict skipped for chapter $id: $e');
       }
     },
-  ).reconcileManga(mangaId).then((_) => coordinator.pumpDownloads());
+  ).reconcileManga(mangaId);
 }
 
 /// Controller / in-app entry point (generated Ref).
@@ -402,12 +415,8 @@ Future<void> reconcileManga(Ref ref, int mangaId) async {
     nets: ref.read(safetyNetConfigProvider),
     mangaId: mangaId,
   );
-  // Keep-rule sync just queued any missing chapters into drift. On Android make
-  // sure the foreground-service worker is running to pick them up (the pump
-  // no-ops there).
-  if (_useBgService) {
-    await ref.read(backgroundDownloadControllerProvider).ensureServiceRunning();
-  }
+  // Keep-rule sync queued any missing chapters; now start downloading them.
+  await ref.read(downloadStarterProvider)();
 }
 
 /// Widget entry point — same as [reconcileManga] but accepts a [WidgetRef].
@@ -424,6 +433,9 @@ Future<void> reconcileMangaWidget(WidgetRef ref, int mangaId) async {
     nets: ref.read(safetyNetConfigProvider),
     mangaId: mangaId,
   );
+  // Start downloading the freshly-queued chapters. THIS was the missing wire
+  // that made "Download all / unread" silently do nothing on Android.
+  await ref.read(downloadStarterProvider)();
 }
 
 /// Launch entry point (main.dart holds a ProviderContainer, not a Ref).
