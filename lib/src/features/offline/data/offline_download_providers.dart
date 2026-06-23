@@ -70,21 +70,19 @@ Stream<OfflineDeviceState> offlineChapterState(Ref ref, int chapterId) {
 /// total pages), or null when the total isn't known yet — drives the
 /// determinate progress arc on a downloading chapter, like Mihon/Komikku.
 @riverpod
-Stream<double?> offlineChapterProgress(Ref ref, int chapterId) async* {
+Stream<double?> offlineChapterProgress(Ref ref, int chapterId) {
   if (!ref.watch(offlineEnabledProvider)) {
-    yield null;
-    return;
+    return Stream.value(null);
   }
   final repo = ref.watch(offlineRepositoryProvider);
-  final total = (await repo.db.chapterById(chapterId))?.pageCount ?? 0;
-  if (total <= 0) {
-    yield null;
-    return;
-  }
-  yield* repo
-      .watchChapterDownloadedPages(chapterId)
-      .map((done) => (done / total).clamp(0.0, 1.0))
-      .distinct();
+  // Re-read the page total on every downloaded-page tick (instead of once up
+  // front) so the arc flips from indeterminate to a real fraction the moment the
+  // total becomes known — webtoon chapters only learn their page count when the
+  // downloader resolves their pages mid-download.
+  return repo.watchChapterDownloadedPages(chapterId).asyncMap((done) async {
+    final total = (await repo.db.chapterById(chapterId))?.pageCount ?? 0;
+    return total <= 0 ? null : (done / total).clamp(0.0, 1.0);
+  }).distinct();
 }
 
 /// Save a chapter's pages to the device. Looks up the synced catalog row and

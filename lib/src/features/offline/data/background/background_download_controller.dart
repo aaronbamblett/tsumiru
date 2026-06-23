@@ -192,7 +192,16 @@ class BackgroundDownloadController with WidgetsBindingObserver {
   }
 
   /// Replay the completion log into drift (live-UI catch-up on resume).
-  Future<void> replayOnResume() => _replay();
+  Future<void> replayOnResume() async {
+    await _replay();
+    // The foreground service may have been killed while we were backgrounded (OS
+    // memory pressure, the dataSync time cap, a swipe-away). If drift still has
+    // pending chapters, (re)start it — ensureServiceRunning is idempotent, so
+    // it's a no-op when the worker is still alive. Without this, downloads only
+    // resumed when the user reopened a manga's details (which calls it too).
+    final pending = await _pendingChapters();
+    if (pending.isNotEmpty) await ensureServiceRunning();
+  }
 
   /// At launch: replay any log left by a previous run, then — if drift still has
   /// a non-empty queue — (re)start the service to finish it.
@@ -223,8 +232,15 @@ class BackgroundDownloadController with WidgetsBindingObserver {
       // (Only meaningful while the app is foreground; the durable record is the
       // completion log, replayed on resume.)
       case 'chapterStart':
-        unawaited(_db.setChapterDeviceState(
-            data['chapterId'] as int, OfflineDeviceState.downloading));
+        final id = data['chapterId'] as int;
+        unawaited(_db.setChapterDeviceState(id, OfflineDeviceState.downloading));
+        // Record the resolved page total so the progress arc can show a real
+        // fraction (only when known + currently unset/0, to avoid clobbering a
+        // good catalog value).
+        final total = data['total'] as int?;
+        if (total != null && total > 0) {
+          unawaited(_db.setChapterPageCount(id, total));
+        }
       case 'page':
         unawaited(_db.into(_db.offlinePages).insertOnConflictUpdate(
               OfflinePagesCompanion.insert(

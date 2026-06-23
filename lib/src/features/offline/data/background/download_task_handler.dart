@@ -192,8 +192,13 @@ class DownloadTaskHandler extends TaskHandler {
     // Tell the UI this chapter is now downloading, so the live progress arc
     // shows while the app is in the foreground (the main isolate applies it to
     // the catalog; while backgrounded it's dropped and the log replay covers it).
-    FlutterForegroundTask.sendDataToMain(
-        {'kind': 'chapterStart', 'chapterId': chapterId});
+    FlutterForegroundTask.sendDataToMain({
+      'kind': 'chapterStart',
+      'chapterId': chapterId,
+      // The resolved page count — lets the UI show a determinate progress arc
+      // (webtoon chapters don't know their page total until resolved here).
+      'total': urls.length,
+    });
 
     final engine = _buildEngine();
     final pages = [
