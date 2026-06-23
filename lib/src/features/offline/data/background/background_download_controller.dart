@@ -251,7 +251,23 @@ class BackgroundDownloadController with WidgetsBindingObserver {
             ));
       case 'chapterDone':
         unawaited(_onChapterDone(data));
+      case 'drained':
+        unawaited(_onDrained());
     }
+  }
+
+  /// The worker drained its queue and is self-stopping. Anything enqueued during
+  /// that shutdown window is in drift `queued` but stranded in the dying worker
+  /// (the "tap download, nothing happens until reopen" bug). So: wait for the
+  /// service to actually stop (stopService is async), then re-check the catalog
+  /// and restart if work remains. ensureServiceRunning is idempotent.
+  Future<void> _onDrained() async {
+    for (var i = 0; i < 20; i++) {
+      if (!await FlutterForegroundTask.isRunningService) break;
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    }
+    final pending = await _pendingChapters();
+    if (pending.isNotEmpty) await ensureServiceRunning();
   }
 
   Future<void> _onChapterDone(Map data) async {

@@ -167,8 +167,11 @@ class DownloadTaskHandler extends TaskHandler {
           _sawNewWork = false;
           continue;
         }
-        // Queue genuinely empty — record the drain marker and self-stop.
+        // Queue genuinely empty — record the drain marker, tell the main isolate
+        // we're stopping (so it can re-check the catalog for anything enqueued
+        // during this shutdown window and restart us), then self-stop.
         await _log.appendDrained();
+        FlutterForegroundTask.sendDataToMain({'kind': 'drained'});
         await FlutterForegroundTask.stopService();
         return;
       }
