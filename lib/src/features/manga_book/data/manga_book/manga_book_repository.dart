@@ -176,6 +176,9 @@ class MangaBookRepository {
         ),
       );
 
+  /// Fetches the chapter list FROM THE SOURCE (the server re-scrapes the source
+  /// site). Returns nothing if the source is down/gone — callers that need to
+  /// survive a dead source should fall back to [getStoredChapterList].
   Future<List<ChapterDto>?> getChapterList(int mangaId) async => client
       .mutate$GetChaptersByMangaId(
         Options$Mutation$GetChaptersByMangaId(
@@ -187,6 +190,25 @@ class MangaBookRepository {
         ),
       )
       .getData((data) => data.fetchChapters?.chapters);
+
+  /// Reads the chapters the server already has STORED for this entry, without
+  /// touching the source. Works whenever the server is reachable, even if the
+  /// source is down — this is what the WebUI shows.
+  Future<List<ChapterDto>?> getStoredChapterList(int mangaId) async => client
+      .query$GetChapterPage(
+        Options$Query$GetChapterPage(
+          variables: Variables$Query$GetChapterPage(
+            condition: Input$ChapterConditionInput(mangaId: mangaId),
+            order: [
+              Input$ChapterOrderInput(
+                by: Enum$ChapterOrderBy.SOURCE_ORDER,
+                byType: Enum$SortOrder.ASC,
+              ),
+            ],
+          ),
+        ),
+      )
+      .getData((data) => data.chapters.nodes);
 }
 
 @riverpod

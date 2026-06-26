@@ -18,6 +18,7 @@ import '../../../../widgets/section_title.dart';
 import '../../controller/server_controller.dart';
 import '../../domain/settings/settings.dart';
 import 'data/library_settings_repository.dart';
+import 'widgets/refresh_chapters_from_source_tile/refresh_chapters_from_source_tile.dart';
 import 'widgets/skip_updating_entries_popup.dart';
 
 class LibrarySettingsScreen extends ConsumerWidget {
@@ -74,6 +75,7 @@ class LibrarySettingsScreen extends ConsumerWidget {
                     onTap: () => const EditCategoriesRoute().go(context),
                   ),
                   // HideEmptyCategoryTile(),
+                  const RefreshChaptersFromSourceTile(),
                   SectionTitle(title: context.l10n.globalUpdate),
                   SettingsPropTile(
                     leading: const Icon(Icons.autorenew_rounded),

@@ -105,6 +105,12 @@
     "@automaticUpdate": {
         "description": "Popup title and Settings text to update Automatic Global Update interval"
     },
+    "@refreshChaptersFromSource": {
+        "description": "Switch title for refreshing chapters from the source when opening an entry"
+    },
+    "@refreshChaptersFromSourceSubtitle": {
+        "description": "Switch subtitle explaining the refresh-chapters-from-source toggle"
+    },
     "@automaticallyRefreshMetadata": {
         "description": "Settings text to update Automatically refresh metadata"
     },
@@ -1096,6 +1102,8 @@
     "autoDownloadNewChapters": "Download new chapters",
     "automaticBackup": "Automatic Backup",
     "automaticUpdate": "Automatic Update",
+    "refreshChaptersFromSource": "Refresh chapters from source",
+    "refreshChaptersFromSourceSubtitle": "When off, opening an entry shows the chapters already on the server. When on, also check the source for new chapters.",
     "automaticallyRefreshMetadata": "Automatically refresh metadata",
     "automaticallyRefreshMetadataSubtitle": "Check for new cover and details when updating library",
     "backup": "Backup & Restore",

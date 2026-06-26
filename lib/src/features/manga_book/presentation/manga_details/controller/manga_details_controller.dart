@@ -14,6 +14,7 @@ import '../../../../../constants/enum.dart';
 import '../../../../../features/offline/data/offline_download_providers.dart';
 import '../../../../../features/offline/data/offline_read_fallback.dart';
 import '../../../../../features/offline/data/offline_repository.dart';
+import '../../../../../features/settings/presentation/library/widgets/refresh_chapters_from_source_tile/refresh_chapters_from_source_tile.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../utils/mixin/shared_preferences_client_mixin.dart';
 import '../../../../library/domain/category/category_model.dart';
@@ -50,9 +51,27 @@ class MangaWithId extends _$MangaWithId {
 class MangaChapterList extends _$MangaChapterList {
   @override
   Future<List<ChapterDto>?> build({required int mangaId}) async {
+    final repo = ref.watch(mangaBookRepositoryProvider);
+    final refreshFromSource =
+        ref.watch(refreshChaptersFromSourceProvider).ifNull();
     final result = await chaptersWithOfflineFallback(
-      fetch: () =>
-          ref.watch(mangaBookRepositoryProvider).getChapterList(mangaId),
+      fetch: () async {
+        // Read the chapters the server already has stored (like the WebUI).
+        final stored = await repo.getStoredChapterList(mangaId);
+        // Show them as-is unless the source has never been fetched (no chapters
+        // yet) or the user opted into refreshing from the source on open.
+        if (!refreshFromSource && stored != null && stored.isNotEmpty) {
+          return stored;
+        }
+        try {
+          final fetched = await repo.getChapterList(mangaId);
+          if (fetched != null && fetched.isNotEmpty) return fetched;
+        } catch (_) {
+          // Source down / gone — fall back to the server's stored chapters
+          // instead of showing an empty list (issue #28).
+        }
+        return stored;
+      },
       db: ref.watch(offlineDatabaseProvider),
       offlineEnabled: ref.watch(offlineEnabledProvider),
       mangaId: mangaId,
@@ -68,8 +87,19 @@ class MangaChapterList extends _$MangaChapterList {
   }
 
   Future<void> refresh([bool onlineFetch = false]) async {
-    final result = await AsyncValue.guard(
-        () => ref.read(mangaBookRepositoryProvider).getChapterList(mangaId));
+    final repo = ref.read(mangaBookRepositoryProvider);
+    // An explicit refresh always tries the source, but falls back to the
+    // server's stored chapters if the source is unavailable (rather than
+    // erroring or clearing the list).
+    final result = await AsyncValue.guard(() async {
+      try {
+        final fetched = await repo.getChapterList(mangaId);
+        if (fetched != null && fetched.isNotEmpty) return fetched;
+      } catch (_) {
+        // fall through to stored
+      }
+      return repo.getStoredChapterList(mangaId);
+    });
     ref.keepAlive();
     if (result.hasError) {
       state = result.copyWithPrevious(state);

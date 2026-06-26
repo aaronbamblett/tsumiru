@@ -59,6 +59,10 @@ enum DBKeys {
   volumeTap(false),
   volumeTapInvert(false),
   hideEmptyCategory(false),
+  // When false (default, Mihon-style), opening an entry shows the chapters the
+  // server already has, without re-scraping the source. When true, also refresh
+  // from the source on open.
+  refreshChaptersFromSource(false),
   pinchToZoom(true),
   // Default to edge-to-edge like Komikku (fullscreen=true + drawUnderCutout):
   // the webtoon strip fills the whole screen, including the status-bar / camera
