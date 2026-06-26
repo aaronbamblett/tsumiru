@@ -76,6 +76,17 @@ class GlobalSearchRoute extends GoRouteData {
       GlobalSearchScreen(key: ValueKey(query), initialQuery: query);
 }
 
+@TypedGoRoute<UpcomingRoute>(path: Routes.upcoming)
+class UpcomingRoute extends GoRouteData {
+  const UpcomingRoute();
+
+  static final $parentNavigatorKey = rootNavigatorKey;
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) =>
+      const UpcomingScreen();
+}
+
 @TypedGoRoute<OnboardingRoute>(path: Routes.onboarding)
 class OnboardingRoute extends GoRouteData {
   const OnboardingRoute();

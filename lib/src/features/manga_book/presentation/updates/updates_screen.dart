@@ -9,6 +9,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 
+import '../../../../routes/router_config.dart';
 import '../../../../utils/extensions/custom_extensions.dart';
 import '../../../../utils/hooks/paging_controller_hook.dart';
 import '../../../../widgets/custom_circular_progress_indicator.dart';
@@ -116,7 +117,14 @@ class UpdatesScreen extends HookConsumerWidget {
                   ],
                 ],
               ),
-              actions: const [UpdateStatusPopupMenu()],
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.calendar_month_rounded),
+                  tooltip: context.l10n.upcoming,
+                  onPressed: () => const UpcomingRoute().push(context),
+                ),
+                const UpdateStatusPopupMenu(),
+              ],
             ),
       bottomSheet: selectedChapters.value.isNotEmpty
           ? MultiChaptersActionsBottomAppBar(
