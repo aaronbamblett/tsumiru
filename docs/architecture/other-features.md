@@ -1,6 +1,6 @@
 # Other Features
 
-Smaller features: about, history, migration, offline (WIP), quick_open.
+Smaller features: about, history, migration, offline, quick_open.
 
 ## about
 
@@ -9,7 +9,7 @@ App/server version info + update checks.
 - `data/about_repository.dart` — **two update paths**: `checkUpdate()` hits the **GitHub Releases REST API** directly; `checkServerUpdate()` uses the server's GraphQL `checkForServerUpdates`. Both use `pub_semver`.
 - `controllers/about_controller.dart` — `aboutProvider` (GraphQL `GetAbout`); `packageInfoProvider` is `throw UnimplementedError()` (overridden in `main.dart`).
 - URLs (all in `lib/src/constants/urls.dart`): `sorayomiGithubUrl` = `github.com/tsumiru-app/tsumiru`, `sorayomiLatestReleaseUrl`/`...ApiUrl` (releases + GitHub API), `sorayomiWhatsNew` = `tsumiru-app.github.io/changelogs/`, `tachideskHelp` = `tsumiru-app.github.io/docs/...`.
-- **Gotcha:** the update check strips the leading `v` from `tag_name` (`Version.parse(tag.substring(1))`) — a tag format change throws. (This was the crash fixed in `004f1a5`.)
+- **Gotcha:** the update check strips the leading `v` from `tag_name` (`Version.parse(tag.substring(1))`) — a tag format change throws. (This was the crash fixed in `33dbd31`.)
 
 ## history
 
@@ -28,13 +28,16 @@ Migrate a manga from one source to another (status/categories/progress/bookmarks
 - `controller/migration_controller.dart` — `MigrationExecution` notifier with **artificial progress delays**; global search via `rateLimitQueueProvider`.
 - **Gotchas:** `migrateDownloads` and `migrateTracking` flags exist in the UI but are **not implemented**; cancel is unimplemented (controller fakes `cancelled`); progress percentages are cosmetic (real work happens at the 75%→100% step).
 
-## offline (WIP — does not compile)
+## offline
 
-Intended on-device Drift/SQLite catalog for offline reading.
+On-device storage so saved chapters read with **no server connection**, with automatic fallback to local copies when the server is unreachable. A full subsystem under `lib/src/features/offline/` (shipped, on `main`).
 
-- **The source files are missing** — `data/` contains only `offline_database.g.dart` and `offline_repository.g.dart`, whose `part of` source files do not exist in the repo. **Any compile will fail** with "target of URI doesn't exist".
-- The generated schema reveals tables: `offline_mangas`, `offline_chapters` (with `deviceState` enum, `pageCount`, `bytes`), `offline_categories`, `offline_manga_categories`, `offline_pages`. Providers declared: `offlineDatabaseProvider`, `offlinePathsProvider`, `offlineRepositoryProvider`, `offlineEnabledProvider` (default false, overridden on native at startup), `offlineSyncProvider`.
-- **Status:** abandoned/in-progress WIP. The actual feature work lives on the `feat/offline-viewing` branch (backed up on the `tsumiru` remote), not in `main`.
+- **Catalog** (`data/offline_database.dart`, Drift/SQLite): `offline_mangas`, `offline_chapters` (`deviceState` enum, `pageCount`, `bytes`), `offline_categories`, `offline_manga_categories`, `offline_pages`. `OfflinePaths` resolves the on-device file locations; pages are written via an atomic page store.
+- **Download engine** (`data/`): a background page-download engine + coordinator that keeps running after you leave the app, and a reconciler that applies each series' keep-rule (`OfflineKeepRule`: off / keep N unread / keep all unread / all) plus hand-pinned chapters.
+- **Sync + read fallback**: the device catalog is kept in step with the server library; the reader serves local pages when the server can't be reached.
+- **Providers:** `offlineEnabledProvider` (default false, overridden to true on native platforms at startup — web has no `dart:io` file store), `offlineDatabaseProvider`, `offlineRepositoryProvider`, `offlinePathsProvider`, `mangaOfflineProgressProvider`, `mangaKeepRuleProvider`.
+- **UI:** the manga-details action-row **Offline** button (`presentation/series_offline_button.dart`) opens the keep-rule sheet; an app-wide state lives in the reader/chapter list.
+- **Gotcha:** offline is native-only (`offlineEnabledProvider` stays false on web), and the controls hide themselves when it's off.
 
 ## quick_open
 

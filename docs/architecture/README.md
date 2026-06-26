@@ -22,7 +22,7 @@ This directory documents how the app is built and how each subsystem works, so c
 | [manga-details-downloads.md](manga-details-downloads.md) | Manga details, chapter list + actions, the download queue |
 | [browse-sources-extensions.md](browse-sources-extensions.md) | Extensions, sources, source browsing, global search |
 | [settings.md](settings.md) | The settings sections, server connection, backup & restore, the two-tier persistence model |
-| [other-features.md](other-features.md) | about/update-check, history, migration, offline (WIP), quick_open |
+| [other-features.md](other-features.md) | about/update-check, history, migration, offline, quick_open |
 | [shared-infrastructure.md](shared-infrastructure.md) | `constants/`, `utils/`, shared `widgets/`, the conventions reused everywhere |
 
 ## How these docs are maintained

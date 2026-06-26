@@ -1,6 +1,6 @@
 # Reader
 
-The reader is central (Tsumiru is webtoon/manhwa-first). It renders pages from the server, supports seven reading modes, pinch-to-zoom, gesture navigation, page-progress tracking, and seamless multi-chapter loading in webtoon/infinity mode.
+The reader is central (Tsumiru is webtoon/manhwa-first). It renders pages from the server, supports eight reading modes, pinch-to-zoom, gesture navigation, page-progress tracking, and seamless multi-chapter loading in webtoon/infinity mode.
 
 ## Key files
 

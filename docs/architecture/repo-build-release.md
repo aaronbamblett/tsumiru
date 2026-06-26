@@ -8,25 +8,24 @@ Tsumiru is its **own application** published at `tsumiru-app/tsumiru` — not a 
 
 | Remote | URL | Role |
 |---|---|---|
-| `tsumiru` | `github.com/tsumiru-app/tsumiru` | **The app — canonical.** `main` and releases here are ground truth |
+| `origin` | `github.com/tsumiru-app/tsumiru` | **The app — canonical.** A fresh `git clone` / `gh repo clone` lands here; `main` and releases are ground truth |
 | `upstream` | `github.com/Suwayomi/Tachidesk-Sorayomi` | The project Tsumiru descends from (attribution / occasional sync) |
-| `origin` | `github.com/aaronbamblett/Tachidesk-Sorayomi` | **Legacy/stale** — the old personal fork, no longer used. Some local clones still carry this remote in config |
 | `ariqpradipa` | `github.com/ariqpradipa/Tachidesk-Sorayomi` | Author of adopted reader PR #362 |
 
-**Workflow:** Tsumiru uses **pull requests** (public project). Branch off `tsumiru/main`, open a PR, let CI gate it, then merge. Branch and commit names are plain/human — no `feat/`-style prefixes. Push/PR-create/merge happen on the `tsumiru` remote.
+**Workflow:** Tsumiru uses **pull requests** (public project). Branch off `main`, open a PR, let CI gate it, then merge. Branch and commit names are plain/human — no `feat/`-style prefixes. Push/PR-create/merge happen on `origin`.
 
 ## Version scheme
 
-`pubspec.yaml`: `version: 0.4.1+30`
+`pubspec.yaml`: `version: 0.6.0+32`
 
-- **Public version** (`0.4.1`) matches the release tag line (`v0.4.1`). Release tags carry a `v` prefix; the pubspec version does not.
-- **Build number** (`+30`) is a monotonically increasing integer (inherited from the upstream `0.6.4+N` series). It MUST increase on every build pushed to a device — Android rejects a same-or-lower build number as a downgrade. CI does not enforce this; bump it manually before tagging.
+- **Public version** (`0.6.0`) matches the release tag line (`v0.6.0`). Release tags carry a `v` prefix; the pubspec version does not.
+- **Build number** (`+32`) is a monotonically increasing integer (inherited from the upstream `0.6.4+N` series). It MUST increase on every build pushed to a device — Android rejects a same-or-lower build number as a downgrade. CI does not enforce this; bump it manually before tagging.
 
 ## Release flow
 
 Pushing a `v*.*.*` tag fires two workflows in parallel:
 
-**`release-fork.yml`** (primary release builder) — Flutter pinned to `3.32.4` (stable). A 5-job matrix (`fail-fast: false`):
+**`release-fork.yml`** (primary release builder) — Flutter pinned to `3.35.7` (stable). A 5-job matrix (`fail-fast: false`):
 
 | Job | Runner | Output |
 |---|---|---|
@@ -62,7 +61,7 @@ flutter gen-l10n
 dart run build_runner build --delete-conflicting-outputs
 ```
 
-`build_runner` regenerates: `*.g.dart` (riverpod_generator, json_serializable, go_router_builder), `*.freezed.dart` (freezed), `*.graphql.dart` (graphql_codegen), and `lib/src/constants/gen/` (flutter_gen). `flutter gen-l10n` regenerates `lib/src/l10n/generated/` from the ARB files (`l10n.yaml`: `synthetic-package: false`). `flutter_native_splash` / `flutter_launcher_icons` are NOT run in CI — their outputs are committed as static assets.
+`build_runner` regenerates: `*.g.dart` (riverpod_generator, json_serializable, go_router_builder), `*.freezed.dart` (freezed), and `*.graphql.dart` (graphql_codegen). `flutter gen-l10n` regenerates `lib/src/l10n/generated/` from the ARB files (`l10n.yaml`: `synthetic-package: false`). `flutter_native_splash` / `flutter_launcher_icons` / `flutter_gen` (`lib/src/constants/gen/`) are NOT run in the build — flutter_gen was dropped from the pipeline (incompatible with build_runner_core 9.x on Dart 3.9), so `gen/assets.gen.dart` is committed and treated as source, alongside the committed splash/icon outputs.
 
 `analysis_options.yaml` excludes generated files; adds `prefer_relative_imports` and `directives_ordering`; suppresses `invalid_annotation_target` (common with freezed/riverpod).
 
