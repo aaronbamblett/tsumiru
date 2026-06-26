@@ -17,6 +17,7 @@ import '../features/library/presentation/library/library_screen.dart';
 import '../features/manga_book/presentation/downloads/downloads_screen.dart';
 import '../features/manga_book/presentation/manga_details/manga_details_screen.dart';
 import '../features/manga_book/presentation/reader/reader_screen.dart';
+import '../features/manga_book/presentation/upcoming/upcoming_screen.dart';
 import '../features/manga_book/presentation/updates/updates_screen.dart';
 import '../features/manga_book/widgets/update_status_summary_sheet.dart';
 import '../features/migration/domain/migration_models.dart';
@@ -65,6 +66,8 @@ abstract class Routes {
   static const library = '/library/:categoryId';
 
   static const updates = '/updates';
+
+  static const upcoming = '/upcoming';
 
   static const downloads = '/downloads';
 
