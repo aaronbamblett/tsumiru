@@ -65,3 +65,6 @@ design/qa-*.png
 flatpak/bundle/
 .flatpak-out/
 .flatpak-builder/
+
+# Claude Code local settings (personal hooks/config)
+.claude/settings.local.json

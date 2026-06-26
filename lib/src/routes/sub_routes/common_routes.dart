@@ -75,3 +75,14 @@ class GlobalSearchRoute extends GoRouteData {
   Widget build(BuildContext context, GoRouterState state) =>
       GlobalSearchScreen(key: ValueKey(query), initialQuery: query);
 }
+
+@TypedGoRoute<OnboardingRoute>(path: Routes.onboarding)
+class OnboardingRoute extends GoRouteData {
+  const OnboardingRoute();
+
+  static final $parentNavigatorKey = rootNavigatorKey;
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) =>
+      const OnboardingScreen();
+}

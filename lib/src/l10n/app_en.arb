@@ -1131,6 +1131,74 @@
     "createBackupDescription": "Backup library as a Tachidesk backup",
     "createBackupTitle": "Create Backup",
     "credentials": "Credentials",
+    "back": "Back",
+    "next": "Next",
+    "finish": "Finish",
+    "onboardingSkip": "Skip",
+    "onboardingWelcomeTitle": "Welcome to Tsumiru",
+    "onboardingWelcomeSubtitle": "A reader for your Suwayomi library.",
+    "onboardingChooseTheme": "Choose your theme",
+    "onboardingServerTitle": "Connect your server",
+    "onboardingServerSubtitle": "Tsumiru reads from your Suwayomi server.",
+    "onboardingServerPortHint": "Suwayomi runs on port 4567 by default.",
+    "onboardingServerStepLabel": "STEP 2 OF 3",
+    "onboardingServerOnNetwork": "On this network",
+    "onboardingServerRemote": "Remote",
+    "onboardingServerNone": "No server yet",
+    "onboardingNoServerHelp": "No problem — you can set up a Suwayomi server and connect it later in Settings.",
+    "onboardingNoServerLink": "How to set up a server",
+    "onboardingTestConnection": "Test connection",
+    "onboardingFindServer": "Find server",
+    "onboardingResolvedAddress": "Found your server at {url}",
+    "@onboardingResolvedAddress": {
+        "placeholders": {
+            "url": { "type": "String" }
+        }
+    },
+    "onboardingFoundAt": "at {address}",
+    "@onboardingFoundAt": {
+        "placeholders": {
+            "address": { "type": "String" }
+        }
+    },
+    "onboardingResolvedNoAuth": "This server is ready — no sign-in needed.",
+    "onboardingResolvedNeedsAuth": "This server needs a sign-in. Add your username and password below.",
+    "onboardingSearchNetwork": "Search my network",
+    "onboardingSearching": "Searching your network…",
+    "onboardingNoServerFound": "No server found on your network — enter the address manually.",
+    "onboardingNeedsLogin": "This server needs a login",
+    "onboardingEnterAddress": "Enter your server's address, or tap Search my network.",
+    "onboardingSignIn": "Sign in",
+    "onboardingCredsRejected": "Those credentials didn't work. Double-check your username, password, and sign-in method.",
+    "onboardingNotReachedHttpsHint": "If it's behind a reverse proxy, try its https address instead.",
+    "onboardingAuthMode": "Sign-in method",
+    "onboardingAuthModeAuto": "Username & password (auto)",
+    "onboardingAuthModeBasic": "Basic auth",
+    "onboardingAuthModeSimple": "Simple login",
+    "onboardingAuthModeUi": "UI login",
+    "onboardingResolvedBasicGated": "Something answered at {url} but it's behind a sign-in we can't read past. Pick 'Username & password' and enter your credentials.",
+    "@onboardingResolvedBasicGated": {
+        "placeholders": {
+            "url": { "type": "String" }
+        }
+    },
+    "onboardingResolvedUnconfirmed": "Reached {url}, but it didn't respond as a Suwayomi server — often that's a router or another app, not your server. Double-check the address and port, or use it anyway.",
+    "@onboardingResolvedUnconfirmed": {
+        "placeholders": {
+            "url": { "type": "String" }
+        }
+    },
+    "onboardingNotReached": "Couldn't reach a server at that address. Check it's running and reachable from this device.",
+    "onboardingUseAddressAnyway": "Use this address anyway",
+    "onboardingConnected": "Connected — Suwayomi v{version}",
+    "@onboardingConnected": {
+        "placeholders": {
+            "version": { "type": "String" }
+        }
+    },
+    "onboardingConnectFailed": "Couldn't reach that server. Check the address (and login, if it needs one).",
+    "onboardingDoneTitle": "You're all set",
+    "onboardingDoneSubtitle": "Browse sources to start adding manga to your library.",
     "current": "Current",
     "daysAgo": "{days} days ago",
     "debugLogs": "Debug logs",

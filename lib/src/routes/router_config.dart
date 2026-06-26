@@ -26,6 +26,8 @@ import '../features/migration/presentation/screens/migration_progress_screen.dar
 import '../features/migration/presentation/screens/migration_search_screen.dart';
 import '../features/migration/presentation/screens/migration_source_selection_screen.dart';
 import '../features/offline/presentation/offline_settings_screen.dart';
+import '../features/onboarding/data/onboarding_complete.dart';
+import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/quick_open/presentation/search_stack/search_stack_screen.dart';
 import '../features/settings/presentation/appearance/appearance_screen.dart';
 import '../features/settings/presentation/backup/backup_screen.dart';
@@ -95,6 +97,7 @@ abstract class Routes {
   static const updateStatus = "/update-status";
   static const about = 'about';
   static const globalSearch = '/global-search';
+  static const onboarding = '/onboarding';
 
   // Migration
   static const migrationGlobalSearch = '/migration/global-search';
@@ -111,6 +114,18 @@ GoRouter routerConfig(ref) {
     debugLogDiagnostics: true,
     initialLocation: const LibraryRoute(categoryId: 0).location,
     navigatorKey: rootNavigatorKey,
+    redirect: (context, state) {
+      // First-run gate: until onboarding is finished, send everything to the
+      // wizard (and keep finished users out of it).
+      final complete = ref.read(onboardingCompleteProvider) ?? false;
+      final atOnboarding =
+          state.matchedLocation == const OnboardingRoute().location;
+      if (!complete && !atOnboarding) return const OnboardingRoute().location;
+      if (complete && atOnboarding) {
+        return const LibraryRoute(categoryId: 0).location;
+      }
+      return null;
+    },
   );
 }
 

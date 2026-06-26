@@ -26,6 +26,7 @@ import 'src/features/offline/data/offline_background_downloads.dart';
 import 'src/features/offline/data/offline_bootstrap.dart';
 import 'src/features/offline/data/offline_download_providers.dart';
 import 'src/features/offline/data/offline_repository.dart';
+import 'src/features/onboarding/data/onboarding_complete.dart';
 import 'src/features/settings/presentation/server/widget/client/server_port_tile/server_port_tile.dart';
 import 'src/features/settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
 import 'src/features/settings/presentation/server/widget/credential_popup/credentials_popup.dart';
@@ -100,7 +101,21 @@ Future<void> main() async {
     debugPrint('readerIgnoreSafeArea migration failed: $e\n$st');
   }
 
-  // 3) Preload both auth providers BEFORE the first frame so synchronous reads
+  // 3) One-time: an install that already points at a real server has already
+  //    "onboarded" — seed the flag so the new first-run wizard never shows for
+  //    existing users. Only run when the flag is unset; treat the default
+  //    loopback URL (and no URL) as not-configured.
+  try {
+    if (sharedPreferences.getBool('onboardingComplete') == null) {
+      final url = sharedPreferences.getString('serverUrl');
+      await sharedPreferences.setBool(
+          'onboardingComplete', serverConfiguredForOnboarding(url));
+    }
+  } catch (e, st) {
+    debugPrint('onboarding migration failed: $e\n$st');
+  }
+
+  // 4) Preload both auth providers BEFORE the first frame so synchronous reads
   //    (image widgets, GraphQL links) get populated state instead of
   //    AsyncLoading — which would produce tokenless requests that get cached
   //    as 401 failures by cached_network_image.
@@ -114,7 +129,7 @@ Future<void> main() async {
     // Both notifiers will re-attempt on first widget read. App still launches.
   }
 
-  // 3) Eagerly instantiate the AuthCoordinator so its build() runs and
+  // 5) Eagerly instantiate the AuthCoordinator so its build() runs and
   //    sets up the proactive-refresh listener BEFORE any image request
   //    can see an expired token. Without this, the Coordinator stays
   //    lazy until something hits a 401 — which for an existing logged-in
@@ -128,7 +143,7 @@ Future<void> main() async {
     // Non-fatal: reactive 401-refresh path still works on first use.
   }
 
-  // 4) Debug-only: auto-connect + auto-login from a local --dart-define test
+  // 6) Debug-only: auto-connect + auto-login from a local --dart-define test
   //    config (see scripts/run-test.sh). No-op in release builds or when
   //    TEST_SERVER_URL isn't provided, so it never affects real users.
   try {
@@ -137,7 +152,7 @@ Future<void> main() async {
     debugPrint('test-config seed failed: $e\n$st');
   }
 
-  // 5) Sweep any chapter left mid-download by a prior crash/kill back to a
+  // 7) Sweep any chapter left mid-download by a prior crash/kill back to a
   //    clean state so it can be retried. Fire-and-forget; native only.
   if (offlineStorage != null) {
     // Push read progress made offline, re-apply keep-rules (queues anything

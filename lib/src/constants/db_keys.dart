@@ -13,6 +13,9 @@ enum DBKeys {
   serverUrl('http://127.0.0.1'),
   serverPort(4567),
   serverPortToggle(true),
+  // First-time onboarding: false until the wizard is finished. A one-time
+  // migration seeds it true for installs that already have a server configured.
+  onboardingComplete(false),
   sourceLanguageFilter(["all", "lastUsed", "en", "localsourcelang"]),
   extensionLanguageFilter(["installed", "update", "en", "all"]),
   sourceLastUsed(null),

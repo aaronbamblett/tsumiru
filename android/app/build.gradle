@@ -54,6 +54,16 @@ android {
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+        manifestPlaceholders += [appLabel: "Tsumiru"]
+
+        // Opt-in side-by-side test build — leaves the daily driver untouched.
+        // Build with: ORG_GRADLE_PROJECT_devBuild=1 flutter build apk --debug
+        // Installs as a separate app id (…tsumiru.dev) named "Tsumiru Dev".
+        if (project.hasProperty('devBuild')) {
+            applicationIdSuffix ".dev"
+            versionNameSuffix "-dev"
+            manifestPlaceholders += [appLabel: "Tsumiru Dev"]
+        }
     }
 
    signingConfigs {

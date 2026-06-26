@@ -113,7 +113,10 @@ extension StringExtensions on String? {
 
   String? get toWebSocket {
     if (isBlank) return null;
-    return this!.replaceFirst(RegExp('http', caseSensitive: false), 'ws');
+    // Anchor to the START so only the scheme is rewritten (http→ws,
+    // https→wss). An un-anchored 'http' would also rewrite a path segment
+    // that happens to contain "http" (e.g. a base path like /proxy/http).
+    return this!.replaceFirst(RegExp('^http', caseSensitive: false), 'ws');
   }
 
   TimeOfDay? get toTimeOfDay {
