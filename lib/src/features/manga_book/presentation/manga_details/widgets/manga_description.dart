@@ -155,6 +155,27 @@ class MangaDescription extends HookConsumerWidget {
                       label: soonDays == 0
                           ? context.l10n.soon
                           : context.l10n.inNDays(soonDays),
+                      // Tapping explains the estimate (Komikku's "Smart update").
+                      onPressed: () => showDialog<void>(
+                        context: context,
+                        builder: (dialogContext) => AlertDialog(
+                          title: Text(context.l10n.smartUpdate),
+                          content: Text(
+                            context.l10n.smartUpdateExpected(
+                              context.l10n.dayCount(soonDays),
+                              context.l10n
+                                  .dayCount(prediction?.intervalDays ?? 7),
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
+                              child: Text(context.l10n.close),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 if (manga.realUrl.isNotBlank)
