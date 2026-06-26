@@ -36,10 +36,10 @@ class NextUpdatePrediction {
 /// median gap between recent distinct release days (upload dates, falling back
 /// to fetch dates, else a 7-day default), clamped to 1..28 days.
 ///
-/// The next date is simply `latestRelease + interval`. (Komikku projects
-/// forward whole cycles, but that only ever reads "Soon" because it *stores*
-/// the value and counts down to a stale one; computed live, latest+interval
-/// gives the intended "In N days" while pending and "Soon" once due/overdue.)
+/// The next date projects forward WHOLE cycles from the latest release to the
+/// next future occurrence (`FetchInterval.calculateNextUpdate`), so a series
+/// whose last chapter is weeks old still reports a real "in N days" rather than
+/// flooring to "Soon".
 NextUpdatePrediction predictNextUpdate(
   List<ChapterRelease> chapters, {
   DateTime? now,
@@ -52,10 +52,28 @@ NextUpdatePrediction predictNextUpdate(
     return NextUpdatePrediction(intervalDays: interval, nextUpdate: null);
   }
 
+  // Project forward whole cycles to the next FUTURE date, exactly like
+  // Komikku's FetchInterval.calculateNextUpdate: a series whose last chapter is
+  // long past still gets a real upcoming date instead of flooring to "Soon".
+  final nowTime = now ?? DateTime.now();
+  final timeSinceLatest = math.max(0, nowTime.difference(latestDate).inDays);
+  final cycle =
+      timeSinceLatest ~/ _increaseInterval(interval, timeSinceLatest, 10);
   return NextUpdatePrediction(
     intervalDays: interval,
-    nextUpdate: latestDate.add(Duration(days: interval)),
+    nextUpdate: latestDate.add(Duration(days: (cycle + 1) * interval)),
   );
+}
+
+/// Komikku's `FetchInterval.increaseInterval`: when a series has missed many
+/// expected cycles, widen the effective interval (doubling) so we don't keep
+/// predicting an imminent release for something long-dormant. Capped at 28.
+int _increaseInterval(int delta, int timeSinceLatest, int increaseWhenOver) {
+  if (delta >= kMaxFetchIntervalDays) return kMaxFetchIntervalDays;
+  final cycle = (timeSinceLatest ~/ delta) + 1;
+  return cycle > increaseWhenOver
+      ? _increaseInterval(delta * 2, timeSinceLatest, increaseWhenOver)
+      : delta;
 }
 
 int _calculateInterval(List<ChapterRelease> chapters) {

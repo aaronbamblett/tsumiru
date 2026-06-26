@@ -1338,6 +1338,20 @@
             "days": { "type": "int" }
         }
     },
+    "smartUpdate": "Smart update",
+    "smartUpdateExpected": "New chapters predicted to be released in around {predicted}, checking around every {interval}.",
+    "@smartUpdateExpected": {
+        "placeholders": {
+            "predicted": { "type": "String" },
+            "interval": { "type": "String" }
+        }
+    },
+    "dayCount": "{count, plural, =1{1 day} other{{count} days}}",
+    "@dayCount": {
+        "placeholders": {
+            "count": { "type": "int" }
+        }
+    },
     "nHours": "{n, plural, =1{1 hour} other{{n} hours}}",
     "nMinutes": "{n, plural, =1{1 Minute} other{{n} Minutes}}",
     "nRepo": "{n, plural, =1{1 Repo} other{{n} Repos}}",

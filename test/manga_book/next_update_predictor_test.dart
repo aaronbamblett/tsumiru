@@ -62,10 +62,23 @@ void main() {
       expect(p.daysUntil(now), 4);
     });
 
-    test('overdue → Soon (0)', () {
-      // weekly, latest 10 days ago → 3 days overdue → 0.
+    test('overdue rolls forward to the next future cycle (Komikku)', () {
+      // weekly, latest 10 days ago. Komikku projects whole cycles forward:
+      // cycle = 10 // 7 = 1, nextUpdate = latest + 2*7 = 4 days out.
       final p = predictNextUpdate([up(10), up(17), up(24), up(31)], now: now);
-      expect(p.daysUntil(now), 0);
+      expect(p.daysUntil(now), 4);
+    });
+
+    test('long-dormant series still projects a future date, not Soon', () {
+      // ~58 days since last release, weekly cadence (the "Surviving the Game"
+      // case). cycle = 58 // 7 = 8, nextUpdate = latest + 9*7 = 63 days from
+      // latest = 5 days out. Must NOT floor to 0/"Soon".
+      final p = predictNextUpdate(
+        [up(58), up(65), up(72), up(79)],
+        now: now,
+      );
+      expect(p.intervalDays, 7);
+      expect(p.daysUntil(now), 5);
     });
 
     test('no chapters → null prediction', () {
