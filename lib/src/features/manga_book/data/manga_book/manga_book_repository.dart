@@ -58,13 +58,17 @@ class MangaBookRepository {
       );
 
   Future<void> deleteChapters(List<int> chapterIds) =>
-      client.mutate$DeleteDownloadedChapters(
-        Options$Mutation$DeleteDownloadedChapters(
-          variables: Variables$Mutation$DeleteDownloadedChapters(
-            input: Input$DeleteDownloadedChaptersInput(ids: chapterIds),
-          ),
-        ),
-      );
+      client
+          .mutate$DeleteDownloadedChapters(
+            Options$Mutation$DeleteDownloadedChapters(
+              variables: Variables$Mutation$DeleteDownloadedChapters(
+                input: Input$DeleteDownloadedChaptersInput(ids: chapterIds),
+              ),
+            ),
+          )
+          // Surface failure as a throw so callers don't cascade a device delete
+          // when the server delete didn't actually happen.
+          .getData((data) => null);
 
   // Mangas
   Future<MangaDto?> getManga({
