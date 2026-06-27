@@ -13,16 +13,21 @@ import '../../../constants/enum.dart';
 import '../../../global_providers/global_providers.dart';
 import '../../../utils/extensions/custom_extensions.dart';
 import '../../../utils/logger/logger.dart';
+import '../../../utils/misc/toast/toast.dart';
 import '../../../utils/platform/is_android_native.dart';
 import '../../auth/data/auth_credentials_store.dart';
-import 'background/background_download_controller_shim.dart';
-import 'chapter_download_engine.dart';
 import '../../manga_book/data/downloads/downloads_repository.dart';
 import '../../manga_book/data/manga_book/manga_book_repository.dart';
 import '../../manga_book/domain/chapter_batch/chapter_batch_model.dart';
 import '../../settings/presentation/server/widget/client/server_port_tile/server_port_tile.dart';
 import '../../settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
 import '../../settings/presentation/server/widget/credential_popup/credentials_popup.dart';
+import '../../tracking/controller/manga_track_records_controller.dart';
+import '../../tracking/data/tracker_repository.dart';
+import '../../tracking/domain/track_progress_gate.dart';
+import '../../tracking/domain/tracking_settings_providers.dart';
+import 'background/background_download_controller_shim.dart';
+import 'chapter_download_engine.dart';
 import 'offline_background_downloads.dart';
 import 'offline_database.dart';
 import 'offline_download_coordinator.dart';
@@ -147,10 +152,19 @@ Future<void> recordReadingProgress(
 /// Push any locally-recorded read progress that hasn't reached the server yet
 /// (e.g. read while offline). Run at launch + after a manga's chapters sync, so
 /// progress made offline syncs up once the connection returns.
+///
+/// After a successful server push, also nudges the manga's external trackers
+/// for any chapter that was marked read — so trackers stay in sync even when
+/// progress was recorded while the device was offline.
 Future<void> pushPendingProgress(ProviderContainer container) async {
   if (!container.read(offlineEnabledProvider)) return;
   final db = container.read(offlineDatabaseProvider);
   final repo = container.read(mangaBookRepositoryProvider);
+
+  // Collect manga IDs where progress was pushed successfully AND the chapter
+  // is marked read — deduplicated so we call trackProgress once per manga.
+  final syncedReadMangaIds = <int>{};
+
   for (final c in await db.dirtyProgressChapters()) {
     final result = await AsyncValue.guard(
       () => repo.putChapter(
@@ -158,7 +172,46 @@ Future<void> pushPendingProgress(ProviderContainer container) async {
         patch: ChapterChange(lastPageRead: c.lastPageRead, isRead: c.isRead),
       ),
     );
-    if (!result.hasError) await db.clearProgressDirty(c.id);
+    if (!result.hasError) {
+      await db.clearProgressDirty(c.id);
+      if (c.isRead) syncedReadMangaIds.add(c.mangaId);
+    }
+  }
+
+  // Push tracker progress for each manga that had read chapters synced.
+  // Gate on the "update after reading" toggle and whether the manga has any
+  // tracker bindings. A tracker failure must never break the progress sync.
+  if (syncedReadMangaIds.isEmpty) return;
+  final enabledAfterReading =
+      container.read(updateProgressAfterReadingProvider).ifNull();
+
+  for (final mangaId in syncedReadMangaIds) {
+    try {
+      final records = await container
+          .read(mangaTrackRecordsProvider(mangaId: mangaId).future);
+      if (!shouldTrackProgress(
+        isRead: true,
+        enabledAfterReading: enabledAfterReading,
+        enabledManualMarkRead: false,
+        manual: false,
+        trackRecordCount: records.length,
+      )) {
+        continue;
+      }
+      final trackResult = await AsyncValue.guard(
+        () => container.read(trackerRepositoryProvider).trackProgress(mangaId),
+      );
+      // Show an error toast if available (null when no widget context — e.g.
+      // at launch before the navigator is mounted, or in tests).
+      try {
+        trackResult.showToastOnError(container.read(toastProvider));
+      } catch (_) {
+        // No widget binding yet — toast is best-effort; swallow silently.
+      }
+    } catch (e) {
+      // Swallow — tracker errors must not interrupt the offline→server sync.
+      logger.e('Offline: tracker push skipped for manga $mangaId: $e');
+    }
   }
 }
 

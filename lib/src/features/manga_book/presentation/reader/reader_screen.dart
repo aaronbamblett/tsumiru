@@ -18,6 +18,7 @@ import '../../../offline/data/offline_download_providers.dart';
 import '../../../settings/presentation/incognito/incognito_mode.dart';
 import '../../../settings/presentation/reader/widgets/reader_ignore_safe_area_tile/reader_ignore_safe_area_tile.dart';
 import '../../../settings/presentation/reader/widgets/reader_mode_tile/reader_mode_tile.dart';
+import '../../../tracking/domain/track_progress_gate.dart';
 import '../../domain/manga/manga_model.dart';
 import '../manga_details/controller/manga_details_controller.dart';
 import 'controller/reader_controller.dart';
@@ -73,6 +74,15 @@ class ReaderScreen extends HookConsumerWidget {
         lastPageRead: isReadingCompleted ? 0 : currentPage,
         isRead: isReadingCompleted,
       );
+
+      // Push progress to external trackers when the toggle is on and the
+      // manga has at least one tracker bound. Fire-and-forget.
+      unawaited(maybeTrackProgressOnReadFetch(
+        ref,
+        mangaId: mangaId,
+        isRead: isReadingCompleted,
+        manual: false,
+      ));
 
       // Invalidate history to refresh the reading progress
       ref.invalidate(readingHistoryProvider);

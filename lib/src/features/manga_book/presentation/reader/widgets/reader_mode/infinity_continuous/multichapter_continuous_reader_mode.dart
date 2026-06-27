@@ -26,6 +26,7 @@ import '../../../../../domain/chapter/chapter_model.dart';
 import '../../../../../domain/chapter_batch/chapter_batch_model.dart';
 import '../../../../../domain/chapter_page/chapter_page_model.dart';
 import '../../../../../domain/manga/manga_model.dart';
+import '../../../../../../tracking/domain/track_progress_gate.dart';
 import '../../../../manga_details/controller/manga_details_controller.dart';
 import '../../../controller/reader_controller.dart';
 import '../../reader_wrapper.dart';
@@ -704,7 +705,15 @@ void _markChapterRead(
     if (result.hasError) {
       completedChapterIds.value = {...completedChapterIds.value}
         ..remove(chapter.id);
+      return;
     }
+    // Push progress to external trackers (fire-and-forget).
+    unawaited(maybeTrackProgressOnReadFetch(
+      ref,
+      mangaId: mangaId,
+      isRead: true,
+      manual: false,
+    ));
     // NOTE: deliberately do NOT invalidate chapterProvider / mangaChapterList
     // here. Doing so while reading rebuilds ReaderScreen through an async reload,
     // which remounts this list and re-applies initialScrollIndex (now 0 from the
