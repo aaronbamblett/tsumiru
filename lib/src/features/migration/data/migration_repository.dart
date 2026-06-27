@@ -16,6 +16,7 @@ import '../../browse_center/domain/source/source_model.dart';
 import '../../manga_book/data/manga_book/__generated__/query.graphql.dart';
 import '../../manga_book/domain/chapter/chapter_model.dart';
 import '../../manga_book/domain/manga/graphql/__generated__/fragment.graphql.dart';
+import '../../tracking/data/tracker_repository.dart';
 import '../domain/migration_models.dart';
 
 part 'migration_repository.g.dart';
@@ -338,7 +339,35 @@ class MigrationRepositoryImpl implements MigrationRepository {
         }
       }
 
-      // Step 4: Remove source manga from library if deleteSource is enabled
+      // Step 4: Migrate tracking records if enabled
+      int migratedTracking = 0;
+      if (options.migrateTracking) {
+        try {
+          final trackerRepo = TrackerRepository(client);
+          final sourceRecords =
+              await trackerRepo.getMangaTrackRecords(fromMangaId);
+          if (sourceRecords != null) {
+            for (final record in sourceRecords) {
+              try {
+                await trackerRepo.bind(
+                  mangaId: toMangaId,
+                  trackerId: record.trackerId,
+                  remoteId: record.remoteId,
+                  private: record.private,
+                );
+                migratedTracking++;
+              } catch (e) {
+                warnings.add(
+                    'Failed to migrate tracking record (tracker ${record.trackerId}): $e');
+              }
+            }
+          }
+        } catch (e) {
+          warnings.add('Tracking migration failed: $e');
+        }
+      }
+
+      // Step 5: Remove source manga from library if deleteSource is enabled
       if (options.deleteSource && sourceManga.inLibrary) {
         final removeFromLibraryResult = await client.mutate$UpdateManga(
           Options$Mutation$UpdateManga(
@@ -367,11 +396,15 @@ class MigrationRepositoryImpl implements MigrationRepository {
       if (migratedCategories > 0) {
         warnings.add('• Categories migrated: $migratedCategories');
       }
+      if (migratedTracking > 0) {
+        warnings.add('• Tracking records migrated: $migratedTracking');
+      }
 
       return MigrationResult(
         success: true,
         migratedChapters: migratedChapters,
         migratedCategories: migratedCategories,
+        migratedTracking: migratedTracking,
         warnings: warnings,
       );
     } catch (e) {

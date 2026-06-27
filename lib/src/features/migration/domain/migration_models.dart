@@ -52,6 +52,7 @@ class MigrationResult with _$MigrationResult {
     Fragment$MangaDto? newManga,
     @Default(0) int migratedCategories,
     @Default(0) int migratedDownloads,
+    @Default(0) int migratedTracking,
   }) = _MigrationResult;
 
   factory MigrationResult.fromJson(Map<String, dynamic> json) =>
