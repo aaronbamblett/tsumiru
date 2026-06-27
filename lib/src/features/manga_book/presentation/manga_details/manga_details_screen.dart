@@ -373,6 +373,7 @@ class MangaDetailsScreen extends HookConsumerWidget {
                     afterOptionSelected: chapterListRefresh,
                     selectedChapters: selectedChapters,
                     chapterList: filteredChapterList.value,
+                    mangaId: mangaId,
                   ),
                 ),
             ],

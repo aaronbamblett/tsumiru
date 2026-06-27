@@ -25,11 +25,16 @@ class MultiChaptersActionsBottomAppBar extends HookConsumerWidget {
     required this.selectedChapters,
     required this.afterOptionSelected,
     this.chapterList,
+    this.mangaId,
   });
 
   final ValueNotifier<Map<int, ChapterDto>> selectedChapters;
   final AsyncCallback afterOptionSelected;
   final List<ChapterDto>? chapterList;
+  /// When non-null, tracker progress is fired after a mark-read action.
+  /// Pass only from single-manga screens (manga-details). Omit from
+  /// multi-manga screens (updates) where chapters span different manga.
+  final int? mangaId;
 
   List<int> get selectedChapterList => selectedChapters.value.keys.toList();
 
@@ -69,6 +74,7 @@ class MultiChaptersActionsBottomAppBar extends HookConsumerWidget {
           chapterList: selectedChapterList,
           change: ChapterChange(isRead: true, lastPageRead: 0),
           refresh: refresh,
+          mangaId: mangaId,
         ),
         MultiChaptersActionIcon(
           iconData: Icons.remove_done_rounded,
