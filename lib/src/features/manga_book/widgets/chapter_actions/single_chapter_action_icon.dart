@@ -10,6 +10,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../../utils/extensions/custom_extensions.dart';
 import '../../../../utils/misc/toast/toast.dart';
+import '../../../offline/data/offline_download_providers.dart';
 import '../../data/manga_book/manga_book_repository.dart';
 import '../../domain/chapter_batch/chapter_batch_model.dart';
 
@@ -32,14 +33,21 @@ class SingleChapterActionIcon extends ConsumerWidget {
     return IconButton(
       icon: imageIcon ?? Icon(icon),
       onPressed: () async {
-        final result = (await AsyncValue.guard(
-          () => ref.read(mangaBookRepositoryProvider).putChapter(
-                chapterId: chapterId,
-                patch: change,
-              ),
-        ));
-        if (context.mounted) {
-          result.showToastOnError(ref.read(toastProvider));
+        final bookmark = change.isBookmarked;
+        if (bookmark != null) {
+          // Bookmark toggles go through the offline-aware path (#33): recorded
+          // on-device + dirty-flagged, so they stick offline and sync later.
+          await recordBookmark(ref, chapterId: chapterId, isBookmarked: bookmark);
+        } else {
+          final result = (await AsyncValue.guard(
+            () => ref.read(mangaBookRepositoryProvider).putChapter(
+                  chapterId: chapterId,
+                  patch: change,
+                ),
+          ));
+          if (context.mounted) {
+            result.showToastOnError(ref.read(toastProvider));
+          }
         }
         await refresh();
       },

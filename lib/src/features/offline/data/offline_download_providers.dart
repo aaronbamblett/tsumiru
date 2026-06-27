@@ -149,6 +149,32 @@ Future<void> recordReadingProgress(
   }
 }
 
+/// Toggle a chapter's bookmark, offline-aware. Writes it to the on-device
+/// catalog first (so it survives offline + restart) and marks it dirty, then
+/// pushes to the server; on a failed push it stays pending for the next online
+/// sync (#33). Best-effort — the local write is authoritative.
+Future<void> recordBookmark(
+  WidgetRef ref, {
+  required int chapterId,
+  required bool isBookmarked,
+}) async {
+  final offline = ref.read(offlineEnabledProvider);
+  if (offline) {
+    await ref
+        .read(offlineDatabaseProvider)
+        .setChapterBookmark(chapterId, isBookmarked);
+  }
+  final result = await AsyncValue.guard(
+    () => ref.read(mangaBookRepositoryProvider).putChapter(
+          chapterId: chapterId,
+          patch: ChapterChange(isBookmarked: isBookmarked),
+        ),
+  );
+  if (offline && !result.hasError) {
+    await ref.read(offlineDatabaseProvider).clearProgressDirty(chapterId);
+  }
+}
+
 /// Deletes a chapter's ON-DEVICE copy once it's read, when the user enabled
 /// "delete local downloads on read". Bookmarked chapters are protected unless
 /// the user allows deleting them. No-op when offline is off, the toggle is off,
@@ -192,7 +218,11 @@ Future<void> pushPendingProgress(ProviderContainer container) async {
     final result = await AsyncValue.guard(
       () => repo.putChapter(
         chapterId: c.id,
-        patch: ChapterChange(lastPageRead: c.lastPageRead, isRead: c.isRead),
+        patch: ChapterChange(
+          lastPageRead: c.lastPageRead,
+          isRead: c.isRead,
+          isBookmarked: c.isBookmarked,
+        ),
       ),
     );
     if (!result.hasError) {

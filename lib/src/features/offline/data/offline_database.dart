@@ -249,6 +249,16 @@ class OfflineDatabase extends _$OfflineDatabase {
       (update(offlineChapters)..where((t) => t.id.equals(chapterId)))
           .write(const OfflineChaptersCompanion(progressDirty: Value(false)));
 
+  /// Record a local bookmark change. Reuses `progressDirty` so the bookmark is
+  /// pushed to the server on the next online sync, alongside read progress (#33).
+  Future<void> setChapterBookmark(int chapterId, bool isBookmarked) =>
+      (update(offlineChapters)..where((t) => t.id.equals(chapterId))).write(
+        OfflineChaptersCompanion(
+          isBookmarked: Value(isBookmarked),
+          progressDirty: const Value(true),
+        ),
+      );
+
   /// Chapters whose local read progress hasn't been pushed to the server.
   Future<List<OfflineChapter>> dirtyProgressChapters() =>
       (select(offlineChapters)..where((t) => t.progressDirty.equals(true)))
