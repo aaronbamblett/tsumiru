@@ -22,6 +22,7 @@ import '../../../../../widgets/manga_cover/list/manga_cover_descriptive_list_til
 import '../../../../../widgets/server_image.dart';
 import '../../../../offline/data/offline_repository.dart';
 import '../../../../offline/presentation/series_offline_button.dart';
+import '../../../../tracking/presentation/hub/track_sheet.dart';
 import '../../../domain/manga/manga_model.dart';
 import '../controller/next_update_controller.dart';
 import 'manga_action_button.dart';
@@ -44,6 +45,59 @@ class MangaDescription extends HookConsumerWidget {
     final cs = context.theme.colorScheme;
     final surface = context.theme.scaffoldBackgroundColor;
     final inLibrary = manga.inLibrary.ifNull();
+
+    final prediction =
+        ref.watch(mangaNextUpdateProvider(mangaId: manga.id));
+    final soonDays = manga.status == Enum$MangaStatus.COMPLETED
+        ? null
+        : prediction?.daysUntil(DateTime.now());
+
+    // Build the Soon line for the header metadata column.
+    final soonWidget = soonDays == null
+        ? null
+        : GestureDetector(
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: Text(context.l10n.smartUpdate),
+                content: Text(
+                  context.l10n.smartUpdateExpected(
+                    context.l10n.dayCount(soonDays),
+                    context.l10n
+                        .dayCount(prediction?.intervalDays ?? 7),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: Text(context.l10n.close),
+                  ),
+                ],
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.hourglass_empty_rounded,
+                  size: 14,
+                  color: soonDays <= 1
+                      ? cs.primary
+                      : context.textTheme.bodySmall?.color,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  soonDays == 0
+                      ? context.l10n.soon
+                      : context.l10n.inNDays(soonDays),
+                  style: context.textTheme.bodySmall?.copyWith(
+                    color: soonDays <= 1 ? cs.primary : null,
+                  ),
+                ),
+              ],
+            ),
+          );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -103,6 +157,7 @@ class MangaDescription extends HookConsumerWidget {
                 showBadges: false,
                 onTitleClicked: (query) =>
                     GlobalSearchRoute(query: query).push(context),
+                belowStatus: soonWidget,
               ),
             ),
           ],
@@ -110,11 +165,6 @@ class MangaDescription extends HookConsumerWidget {
         Builder(builder: (context) {
           // Komikku-style action row: equal-width icon-over-label columns.
           final offlineEnabled = ref.watch(offlineEnabledProvider);
-          final prediction =
-              ref.watch(mangaNextUpdateProvider(mangaId: manga.id));
-          final soonDays = manga.status == Enum$MangaStatus.COMPLETED
-              ? null
-              : prediction?.daysUntil(DateTime.now());
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
             child: Row(
@@ -145,39 +195,16 @@ class MangaDescription extends HookConsumerWidget {
                     },
                   ),
                 ),
+                Expanded(
+                  child: MangaActionButton(
+                    active: manga.trackRecords.totalCount > 0,
+                    icon: const Icon(Icons.sync_rounded),
+                    label: context.l10n.tracking,
+                    onPressed: () => showTrackSheet(context, manga.id, mangaTitle: manga.title),
+                  ),
+                ),
                 if (offlineEnabled)
                   Expanded(child: SeriesOfflineButton(mangaId: manga.id)),
-                if (soonDays != null)
-                  Expanded(
-                    child: MangaActionButton(
-                      active: soonDays <= 1,
-                      icon: const Icon(Icons.hourglass_empty_rounded),
-                      label: soonDays == 0
-                          ? context.l10n.soon
-                          : context.l10n.inNDays(soonDays),
-                      // Tapping explains the estimate (Komikku's "Smart update").
-                      onPressed: () => showDialog<void>(
-                        context: context,
-                        builder: (dialogContext) => AlertDialog(
-                          title: Text(context.l10n.smartUpdate),
-                          content: Text(
-                            context.l10n.smartUpdateExpected(
-                              context.l10n.dayCount(soonDays),
-                              context.l10n
-                                  .dayCount(prediction?.intervalDays ?? 7),
-                            ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () =>
-                                  Navigator.of(dialogContext).pop(),
-                              child: Text(context.l10n.close),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
                 if (manga.realUrl.isNotBlank)
                   Expanded(
                     child: MangaActionButton(

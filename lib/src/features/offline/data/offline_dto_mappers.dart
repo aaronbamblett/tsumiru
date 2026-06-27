@@ -32,6 +32,7 @@ MangaDto offlineMangaToDto(OfflineManga m, {int chapterCount = 0}) =>
       meta: const <Fragment$MangaDto$meta>[],
       sourceId: '0',
       status: Enum$MangaStatus.UNKNOWN,
+      trackRecords: Fragment$MangaDto$trackRecords(totalCount: 0),
       unreadCount: 0,
       updateStrategy: Enum$UpdateStrategy.ALWAYS_UPDATE,
       url: '',

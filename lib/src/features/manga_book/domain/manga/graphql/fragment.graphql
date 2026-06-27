@@ -41,6 +41,9 @@ fragment MangaDto on MangaType {
   thumbnailUrl
   thumbnailUrlLastFetched
   title
+  trackRecords {
+    totalCount
+  }
   unreadCount
   updateStrategy
   url
