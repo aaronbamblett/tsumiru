@@ -59,6 +59,21 @@ class _FakeMangaBookRepository extends MangaBookRepository {
   }
 }
 
+/// putChapter that fails like an offline mutation — used to prove a failed push
+/// keeps the dirty flag (the bug where offline progress/bookmarks were cleared
+/// without ever reaching the server).
+class _FailingMangaBookRepository extends MangaBookRepository {
+  _FailingMangaBookRepository() : super(_dummyClient());
+
+  @override
+  Future<void> putChapter({
+    required int chapterId,
+    required ChapterChange patch,
+  }) async {
+    throw Exception('offline — mutation failed');
+  }
+}
+
 /// Notifier subclass that returns a fixed bool? without touching SharedPreferences.
 class _FixedToggle extends UpdateProgressAfterReading {
   _FixedToggle(this._value);
@@ -196,6 +211,31 @@ void main() {
 
       expect(tracker.trackProgressCalls, isEmpty,
           reason: 'toggle is off — no tracker push');
+    });
+
+    test('failed push KEEPS the dirty flag (stays pending, server never got it)',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final db = testOfflineDatabase();
+      addTearDown(db.close);
+      final container = ProviderContainer(overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        offlineEnabledProvider.overrideWithValue(true),
+        offlineDatabaseProvider.overrideWithValue(db),
+        mangaBookRepositoryProvider
+            .overrideWithValue(_FailingMangaBookRepository()),
+      ]);
+      addTearDown(container.dispose);
+
+      await _seed(db, 10, mangaId: 1, isRead: true, dirty: true);
+
+      await pushPendingProgress(container);
+
+      // The push threw → the chapter must remain dirty so it retries later,
+      // instead of being silently marked synced.
+      expect((await db.dirtyProgressChapters()).map((c) => c.id), [10],
+          reason: 'a failed push must not clear the dirty flag');
     });
 
     test('zero track records → trackProgress NOT called', () async {
