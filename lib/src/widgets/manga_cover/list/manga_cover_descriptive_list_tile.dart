@@ -27,6 +27,7 @@ class MangaCoverDescriptiveListTile extends StatelessWidget {
     this.showBadges = true,
     this.showCountBadges = true,
     this.selected = false,
+    this.belowStatus,
   });
   final MangaDto manga;
   final bool showBadges;
@@ -35,6 +36,10 @@ class MangaCoverDescriptiveListTile extends StatelessWidget {
   final VoidCallback? onLongPress;
   final ValueChanged<String?>? onTitleClicked;
   final bool selected;
+  /// Optional widget rendered below the status/source line (details screen only).
+  /// When null — the default for library/browse callers — nothing is rendered.
+  final Widget? belowStatus;
+
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
@@ -123,6 +128,10 @@ class MangaCoverDescriptiveListTile extends StatelessWidget {
                         ]
                       ],
                     ),
+                    if (belowStatus != null) ...[
+                      Gap(4),
+                      belowStatus!,
+                    ],
                     // if (showLastReadChapter) ...[
                     //   Padding(
                     //     padding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
