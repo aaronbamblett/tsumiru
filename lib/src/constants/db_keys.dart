@@ -89,6 +89,10 @@ enum DBKeys {
   offlineDownloadConcurrency(2),
   // Restrict background downloads to Wi-Fi connections only.
   downloadOnlyOverWifi(false),
+  // Delete a chapter's on-device copy once it's read (frees device space). The
+  // server copy is untouched. Bookmarked chapters are protected unless allowed.
+  deleteLocalAfterRead(false),
+  allowDeleteLocalBookmarked(false),
   // Lock phones to portrait (landscape on a phone currently looks broken). Off
   // by default — many readers prefer landscape; tablets/desktop ignore it.
   forcePortrait(false),

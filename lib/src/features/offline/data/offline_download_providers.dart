@@ -149,6 +149,29 @@ Future<void> recordReadingProgress(
   }
 }
 
+/// Deletes a chapter's ON-DEVICE copy once it's read, when the user enabled
+/// "delete local downloads on read". Bookmarked chapters are protected unless
+/// the user allows deleting them. No-op when offline is off, the toggle is off,
+/// the chapter isn't read, or it isn't downloaded on the device. The server
+/// copy is never touched (that's the server-side delete setting, #36).
+Future<void> maybeDeleteLocalDownloadOnRead(
+  WidgetRef ref, {
+  required int chapterId,
+  required bool isRead,
+}) async {
+  if (!isRead) return;
+  if (!ref.read(offlineEnabledProvider)) return;
+  if (!ref.read(deleteLocalAfterReadProvider).ifNull()) return;
+  final manager = ref.read(offlineDownloadManagerProvider);
+  if (manager == null) return;
+  final c = await ref.read(offlineRepositoryProvider).chapterById(chapterId);
+  if (c == null || c.deviceState != OfflineDeviceState.downloaded) return;
+  if (c.isBookmarked && !ref.read(allowDeleteLocalBookmarkedProvider).ifNull()) {
+    return;
+  }
+  await manager.deleteChapter(c);
+}
+
 /// Push any locally-recorded read progress that hasn't reached the server yet
 /// (e.g. read while offline). Run at launch + after a manga's chapters sync, so
 /// progress made offline syncs up once the connection returns.

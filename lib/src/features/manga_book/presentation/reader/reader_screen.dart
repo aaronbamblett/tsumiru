@@ -84,6 +84,13 @@ class ReaderScreen extends HookConsumerWidget {
         manual: false,
       ));
 
+      // Delete the on-device copy once read, if the user opted in.
+      unawaited(maybeDeleteLocalDownloadOnRead(
+        ref,
+        chapterId: chapterValue.id,
+        isRead: isReadingCompleted,
+      ));
+
       // Invalidate history to refresh the reading progress
       ref.invalidate(readingHistoryProvider);
     }, [chapter.valueOrNull, chapterPages.valueOrNull]);

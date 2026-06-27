@@ -12,6 +12,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../../utils/extensions/custom_extensions.dart';
 import '../../../../utils/misc/toast/toast.dart';
+import '../../../offline/data/offline_download_providers.dart';
 import '../../../tracking/domain/track_progress_gate.dart';
 import '../../data/manga_book/manga_book_repository.dart';
 import '../../domain/chapter_batch/chapter_batch_model.dart';
@@ -63,6 +64,14 @@ class MultiChaptersActionIcon extends ConsumerWidget {
             isRead: true,
             manual: true,
           ));
+          // Delete the on-device copies once read, if the user opted in.
+          for (final cid in chapterList) {
+            unawaited(maybeDeleteLocalDownloadOnRead(
+              ref,
+              chapterId: cid,
+              isRead: true,
+            ));
+          }
         }
         await refresh(true);
       },

@@ -18,15 +18,16 @@ import '../../../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../../../utils/misc/app_utils.dart';
 import '../../../../../../../widgets/server_image.dart';
 import '../../../../../../../widgets/zoom/scroll_offset_to_scroll_controller.dart';
+import '../../../../../../offline/data/offline_download_providers.dart';
 import '../../../../../../settings/presentation/reader/widgets/reader_feedback_toasts_tile/reader_feedback_toasts_tile.dart';
 import '../../../../../../settings/presentation/reader/widgets/reader_pinch_to_zoom/reader_pinch_to_zoom.dart';
 import '../../../../../../settings/presentation/reader/widgets/reader_scroll_animation_tile/reader_scroll_animation_tile.dart';
+import '../../../../../../tracking/domain/track_progress_gate.dart';
 import '../../../../../data/manga_book/manga_book_repository.dart';
 import '../../../../../domain/chapter/chapter_model.dart';
 import '../../../../../domain/chapter_batch/chapter_batch_model.dart';
 import '../../../../../domain/chapter_page/chapter_page_model.dart';
 import '../../../../../domain/manga/manga_model.dart';
-import '../../../../../../tracking/domain/track_progress_gate.dart';
 import '../../../../manga_details/controller/manga_details_controller.dart';
 import '../../../controller/reader_controller.dart';
 import '../../reader_wrapper.dart';
@@ -713,6 +714,12 @@ void _markChapterRead(
       mangaId: mangaId,
       isRead: true,
       manual: false,
+    ));
+    // Delete the on-device copy once read, if the user opted in.
+    unawaited(maybeDeleteLocalDownloadOnRead(
+      ref,
+      chapterId: chapter.id,
+      isRead: true,
     ));
     // NOTE: deliberately do NOT invalidate chapterProvider / mangaChapterList
     // here. Doing so while reading rebuilds ReaderScreen through an async reload,
