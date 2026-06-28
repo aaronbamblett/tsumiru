@@ -105,6 +105,14 @@ class OfflineRepository {
     return m?.keepRule ?? OfflineKeepRule.off;
   }
 
+  /// The per-series keep-offline rule AND its unread-buffer size — so the UI can
+  /// tick the exact "Keep next N unread" preset that's active.
+  Future<({OfflineKeepRule rule, int count})> keepConfigFor(int mangaId) async {
+    final m = await (db.select(db.offlineMangas)..where((t) => t.id.equals(mangaId)))
+        .getSingleOrNull();
+    return (rule: m?.keepRule ?? OfflineKeepRule.off, count: m?.keepUnreadCount ?? 5);
+  }
+
   /// Manga ids with at least one chapter downloaded to this device — for the
   /// "On device" library filter.
   Future<Set<int>> deviceDownloadedMangaIds() => db.mangaIdsWithDeviceDownloads();

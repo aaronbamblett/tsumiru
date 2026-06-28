@@ -541,6 +541,17 @@ Future<OfflineKeepRule> mangaKeepRule(Ref ref, int mangaId) async {
   return ref.watch(offlineRepositoryProvider).keepRuleFor(mangaId);
 }
 
+/// The keep-offline rule AND its unread-buffer size — so the sheet can tick the
+/// exact "Keep next N unread" preset that's active.
+@riverpod
+Future<({OfflineKeepRule rule, int count})> mangaKeepConfig(
+    Ref ref, int mangaId) async {
+  if (!ref.watch(offlineEnabledProvider)) {
+    return (rule: OfflineKeepRule.off, count: 5);
+  }
+  return ref.watch(offlineRepositoryProvider).keepConfigFor(mangaId);
+}
+
 /// How many of a manga's chapters are downloaded on this device — drives the
 /// series Download/On-device button label.
 @riverpod

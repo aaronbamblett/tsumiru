@@ -1754,15 +1754,16 @@
     "@keepOfflineOff": {
         "description": "Keep-offline rule: disabled"
     },
-    "keepOfflineNUnread": "Keep 3 unread",
-    "@keepOfflineNUnread": {
-        "description": "Keep-offline rule: keep the N most recent unread chapters on device"
+    "keepOfflineNextUnread": "Keep next {count} unread",
+    "@keepOfflineNextUnread": {
+        "description": "Keep-offline rule: keep the next N unread chapters downloaded (rolling buffer)",
+        "placeholders": { "count": { "type": "int" } }
     },
     "keepOfflineAllUnread": "Keep all unread",
     "@keepOfflineAllUnread": {
         "description": "Keep-offline rule: keep all unread chapters on device"
     },
-    "keepOfflineAll": "Keep all",
+    "keepOfflineAll": "Keep all chapters",
     "@keepOfflineAll": {
         "description": "Keep-offline rule: keep every chapter on device"
     },
@@ -1775,12 +1776,12 @@
         "description": "Series offline button label when the series has downloads on this device"
     },
     "offlineSheetTitle": "Offline reading",
-    "offlineSheetSubtitle": "Keep chapters on this device so you can read them without a connection to your server. This is separate from server downloads (the cloud icon up top).",
+    "offlineSheetSubtitle": "Keep chapters downloaded on this device, topped up automatically as you read. Separate from server downloads (the cloud icon up top).",
     "offlineDownloadAll": "Download all chapters",
     "@offlineDownloadAll": {
         "description": "Series offline action: download every chapter to this device"
     },
-    "offlineRemoveSeries": "Remove downloads",
+    "offlineRemoveSeries": "Remove all downloads",
     "@offlineRemoveSeries": {
         "description": "Series offline action: remove this series' downloads from the device"
     },

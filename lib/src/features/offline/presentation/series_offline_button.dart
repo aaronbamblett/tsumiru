@@ -53,8 +53,9 @@ class SeriesOfflineButton extends ConsumerWidget {
   }
 
   void _openSheet(BuildContext context, WidgetRef ref, bool onDevice) {
-    final rule = ref.read(mangaKeepRuleProvider(mangaId)).valueOrNull ??
-        OfflineKeepRule.off;
+    final config = ref.read(mangaKeepConfigProvider(mangaId)).valueOrNull ??
+        (rule: OfflineKeepRule.off, count: 5);
+    final rule = config.rule;
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -88,35 +89,46 @@ class SeriesOfflineButton extends ConsumerWidget {
               ),
             ),
             const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.download_rounded),
-              title: Text(sheetContext.l10n.offlineDownloadAll),
-              trailing: rule == OfflineKeepRule.all
-                  ? const Icon(Icons.check_rounded)
-                  : null,
-              onTap: () => _apply(sheetContext, ref, OfflineKeepRule.all),
-            ),
-            ListTile(
-              leading: const Icon(Icons.bookmark_added_outlined),
-              title: Text(sheetContext.l10n.keepOfflineNUnread),
-              trailing: rule == OfflineKeepRule.nUnread
-                  ? const Icon(Icons.check_rounded)
-                  : null,
-              onTap: () => _apply(sheetContext, ref, OfflineKeepRule.nUnread),
-            ),
+            // Rolling forward buffer: keep the next N unread downloaded, topped
+            // up as you read. Distinct buffer sizes.
+            for (final n in const [5, 10, 25])
+              ListTile(
+                leading: const Icon(Icons.bookmark_add_outlined),
+                title: Text(sheetContext.l10n.keepOfflineNextUnread(n)),
+                trailing: (rule == OfflineKeepRule.nUnread && config.count == n)
+                    ? const Icon(Icons.check_rounded)
+                    : null,
+                onTap: () =>
+                    _apply(sheetContext, ref, OfflineKeepRule.nUnread, n),
+              ),
             ListTile(
               leading: const Icon(Icons.menu_book_outlined),
               title: Text(sheetContext.l10n.keepOfflineAllUnread),
               trailing: rule == OfflineKeepRule.allUnread
                   ? const Icon(Icons.check_rounded)
                   : null,
-              onTap: () => _apply(sheetContext, ref, OfflineKeepRule.allUnread),
+              onTap: () => _apply(
+                  sheetContext, ref, OfflineKeepRule.allUnread, config.count),
             ),
-            if (onDevice) ...[
+            ListTile(
+              leading: const Icon(Icons.library_books_outlined),
+              title: Text(sheetContext.l10n.keepOfflineAll),
+              trailing: rule == OfflineKeepRule.all
+                  ? const Icon(Icons.check_rounded)
+                  : null,
+              onTap: () =>
+                  _apply(sheetContext, ref, OfflineKeepRule.all, config.count),
+            ),
+            if (onDevice || rule != OfflineKeepRule.off) ...[
               const Divider(height: 1),
               ListTile(
-                leading: const Icon(Icons.delete_outline_rounded),
-                title: Text(sheetContext.l10n.offlineRemoveSeries),
+                leading: Icon(Icons.delete_outline_rounded,
+                    color: sheetContext.theme.colorScheme.error),
+                title: Text(
+                  sheetContext.l10n.offlineRemoveSeries,
+                  style: TextStyle(
+                      color: sheetContext.theme.colorScheme.error),
+                ),
                 onTap: () => _removeAll(sheetContext, ref),
               ),
             ],
@@ -126,13 +138,14 @@ class SeriesOfflineButton extends ConsumerWidget {
     );
   }
 
-  Future<void> _apply(
-      BuildContext sheetContext, WidgetRef ref, OfflineKeepRule rule) async {
+  Future<void> _apply(BuildContext sheetContext, WidgetRef ref,
+      OfflineKeepRule rule, int count) async {
     final messenger = ScaffoldMessenger.of(sheetContext);
     final toast = sheetContext.l10n.offlineDownloadingToast;
     Navigator.of(sheetContext).pop();
-    await ref.read(offlineDatabaseProvider).setKeepRule(mangaId, rule, 3);
+    await ref.read(offlineDatabaseProvider).setKeepRule(mangaId, rule, count);
     ref.invalidate(mangaKeepRuleProvider(mangaId));
+    ref.invalidate(mangaKeepConfigProvider(mangaId));
     messenger.showSnackBar(SnackBar(content: Text(toast)));
     // The reconcile may pull many chapters; run it in the background and refresh
     // the on-device count as it completes.
@@ -148,6 +161,7 @@ class SeriesOfflineButton extends ConsumerWidget {
       await deleteChapterFromDevice(ref, c.id);
     }
     ref.invalidate(mangaKeepRuleProvider(mangaId));
+    ref.invalidate(mangaKeepConfigProvider(mangaId));
     ref.invalidate(mangaDownloadedCountProvider(mangaId));
   }
 }
