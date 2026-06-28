@@ -88,18 +88,35 @@ class MangaChapterList extends _$MangaChapterList {
 
   Future<void> refresh([bool onlineFetch = false]) async {
     final repo = ref.read(mangaBookRepositoryProvider);
-    // An explicit refresh always tries the source, but falls back to the
-    // server's stored chapters if the source is unavailable (rather than
-    // erroring or clearing the list).
-    final result = await AsyncValue.guard(() async {
-      try {
-        final fetched = await repo.getChapterList(mangaId);
-        if (fetched != null && fetched.isNotEmpty) return fetched;
-      } catch (_) {
-        // fall through to stored
-      }
-      return repo.getStoredChapterList(mangaId);
-    });
+    // Only scrape the source when the user explicitly asked (pull-to-refresh /
+    // update button -> onlineFetch) or has the "refresh from source" setting on.
+    // Otherwise read the server's STORED chapters — mirrors build()'s gate
+    // (#28), so merely opening a series (the on-mount refresh) no longer fires a
+    // full, slow source re-scrape on every visit; an explicit refresh still
+    // tries the source and falls back to stored if it's unavailable.
+    final refreshFromSource =
+        onlineFetch || ref.read(refreshChaptersFromSourceProvider).ifNull();
+    // Wrap in chaptersWithOfflineFallback like build() does, so an explicit
+    // refresh while the device is offline serves the on-device catalog instead
+    // of erroring/clearing the list.
+    final result = await AsyncValue.guard(() => chaptersWithOfflineFallback(
+          fetch: () async {
+            final stored = await repo.getStoredChapterList(mangaId);
+            if (!refreshFromSource && stored != null && stored.isNotEmpty) {
+              return stored;
+            }
+            try {
+              final fetched = await repo.getChapterList(mangaId);
+              if (fetched != null && fetched.isNotEmpty) return fetched;
+            } catch (_) {
+              // Source down / gone — fall back to stored instead of clearing.
+            }
+            return stored;
+          },
+          db: ref.read(offlineDatabaseProvider),
+          offlineEnabled: ref.read(offlineEnabledProvider),
+          mangaId: mangaId,
+        ));
     ref.keepAlive();
     if (result.hasError) {
       state = result.copyWithPrevious(state);

@@ -58,7 +58,9 @@ class ChapterDownloadPresetsButton extends ConsumerWidget {
     if (context.mounted) {
       result.showToastOnError(ref.read(toastProvider));
     }
-    await refresh(true);
+    // Enqueuing a download doesn't change the source's chapter list — refresh
+    // from the server's stored chapters (updated download state), no re-scrape.
+    await refresh(false);
   }
 
   @override
