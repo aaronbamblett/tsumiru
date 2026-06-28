@@ -109,7 +109,7 @@ class ExtensionListTileTailing extends StatelessWidget {
       );
     } else {
       if (extension.isInstalled.ifNull()) {
-        return TextButton(
+        final actionButton = TextButton(
           onPressed: (!isLoading.value)
               ? () async {
                   try {
@@ -145,6 +145,38 @@ class ExtensionListTileTailing extends StatelessWidget {
                     ? context.l10n.uninstalling
                     : context.l10n.uninstall,
           ),
+        );
+        // When an update is pending the single button reads "Update", which used
+        // to leave no way to uninstall the extension. Keep Update but add a
+        // separate uninstall affordance so a pending update can't trap it (#290).
+        if (!extension.hasUpdate.ifNull()) return actionButton;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            actionButton,
+            IconButton(
+              tooltip: context.l10n.uninstall,
+              icon: const Icon(Icons.delete_outline),
+              onPressed: isLoading.value
+                  ? null
+                  : () async {
+                      try {
+                        isLoading.value = (true);
+                        await AppUtils.guard(
+                          () async {
+                            await repository
+                                .uninstallExtension(extension.pkgName);
+                            await refresh();
+                          },
+                          ref.read(toastProvider),
+                        );
+                        isLoading.value = (false);
+                      } catch (e) {
+                        //
+                      }
+                    },
+            ),
+          ],
         );
       } else {
         return TextButton(

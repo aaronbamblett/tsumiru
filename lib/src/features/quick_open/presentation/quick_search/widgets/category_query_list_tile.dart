@@ -51,7 +51,7 @@ class CategoryQueryListTile extends StatelessWidget {
           MangaRoute(mangaId: manga!.id, categoryId: category?.id)
               .push(context);
         } else {
-          LibraryRoute(categoryId: category?.order ?? 0).push(context);
+          LibraryRoute(categoryId: category?.id ?? 0).push(context);
         }
         afterClick?.call();
       },

@@ -49,8 +49,11 @@ class LibraryScreen extends HookConsumerWidget {
         } else {
           return DefaultTabController(
             length: data!.length,
-            initialIndex:
-                min(categoryId.getValueOnNullOrNegative(), data.length - 1),
+            // The route param is a category ID (e.g. from quick-search), not a
+            // positional tab index — the visible list filters out empty/hidden
+            // categories, so id != index. Select the tab whose category matches
+            // the id, falling back to the first tab if it isn't visible (#284).
+            initialIndex: max(0, data.indexWhere((c) => c.id == categoryId)),
             child: Scaffold(
               appBar: AppBar(
                 title: !showSearch.value

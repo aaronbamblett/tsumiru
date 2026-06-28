@@ -14,6 +14,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../../constants/enum.dart';
 import '../../../../utils/extensions/custom_extensions.dart';
 import '../../../history/presentation/history_controller.dart';
+import '../../../library/presentation/library/controller/library_controller.dart';
 import '../../../offline/data/offline_download_providers.dart';
 import '../../../settings/presentation/incognito/incognito_mode.dart';
 import '../../../settings/presentation/reader/widgets/reader_ignore_safe_area_tile/reader_ignore_safe_area_tile.dart';
@@ -153,13 +154,20 @@ class ReaderScreen extends HookConsumerWidget {
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) {
           // Flush the latest page reached so progress isn't lost to a pending
-          // debounce when you back out (catalog write is synchronous here).
+          // debounce when you back out. AWAIT it so the read write lands before
+          // we invalidate the lists below — otherwise they re-fetch the stale
+          // (pre-read) state and the unread badge/count comes back wrong.
           debounce.value?.cancel();
           if (latestPage.value >= 0) {
-            updateLastRead(latestPage.value);
+            await updateLastRead(latestPage.value);
           }
           ref.invalidate(chapterProviderWithIndex);
           ref.invalidate(mangaChapterListProvider(mangaId: mangaId));
+          // Refresh the library's per-category lists so the unread badge updates
+          // even when the reader was opened directly (e.g. the continue-reading
+          // button), bypassing the manga-details screen that would otherwise do
+          // this on its own pop (#282).
+          ref.invalidate(categoryMangaListProvider);
         }
       },
       child: ScrollConfiguration(
