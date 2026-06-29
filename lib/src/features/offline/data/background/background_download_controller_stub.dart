@@ -24,6 +24,8 @@ class BackgroundDownloadController {
   Future<void> onEnqueued(List<int> chapterIds) async {}
   Future<void> onRemoved(int chapterId) async {}
   Future<void> onWifiOnlyChanged(bool value) async {}
+  Future<void> pause() async {}
+  Future<void> resume() async {}
   Future<void> replayAtLaunchAndMaybeStart() async {}
 }
 

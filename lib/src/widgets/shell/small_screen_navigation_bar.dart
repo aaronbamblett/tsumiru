@@ -5,10 +5,12 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../constants/navigation_bar_data.dart';
+import '../../features/offline/data/offline_nav_status.dart';
 
-class SmallScreenNavigationBar extends StatelessWidget {
+class SmallScreenNavigationBar extends ConsumerWidget {
   const SmallScreenNavigationBar({
     super.key,
     required this.selectedIndex,
@@ -19,17 +21,20 @@ class SmallScreenNavigationBar extends StatelessWidget {
   final void Function(int) onDestinationSelected;
 
   NavigationDestination getNavigationDestination(
-      BuildContext context, NavigationBarData data) {
+      BuildContext context, NavigationBarData data, bool downloadsPaused) {
+    final badged = downloadsPaused && data.icon == Icons.download_outlined;
     return NavigationDestination(
-      icon: Icon(data.icon),
+      icon: badged ? Badge(child: Icon(data.icon)) : Icon(data.icon),
       label: data.label(context),
-      selectedIcon: Icon(data.activeIcon),
+      selectedIcon:
+          badged ? Badge(child: Icon(data.activeIcon)) : Icon(data.activeIcon),
       tooltip: data.label(context),
     );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final downloadsPaused = ref.watch(downloadsPausedBadgeProvider);
     return NavigationBarTheme(
       data: NavigationBarThemeData(
         labelTextStyle: WidgetStateProperty.all(
@@ -41,7 +46,7 @@ class SmallScreenNavigationBar extends StatelessWidget {
         onDestinationSelected: onDestinationSelected,
         destinations: NavigationBarData.getNavList(context)
             .map<NavigationDestination>(
-              (e) => getNavigationDestination(context, e),
+              (e) => getNavigationDestination(context, e, downloadsPaused),
             )
             .toList(),
       ),

@@ -81,6 +81,11 @@ class DownloadTaskHandler extends TaskHandler {
   /// the in-flight chapter observe it and unwind.
   var _stopping = false;
 
+  /// True once the main isolate sends `{op:'pause'}` (user paused downloads).
+  /// The in-flight chapter is cancelled (left resumable) and the worker
+  /// self-stops; drift retains queued/downloading so resume re-enqueues them.
+  var _paused = false;
+
   BackgroundWorkOrder? _order;
   late BackgroundCompletionLog _log;
   late OfflinePaths _paths;
@@ -142,6 +147,12 @@ class DownloadTaskHandler extends TaskHandler {
         _queue.remove(id);
       case 'setWifiOnly':
         _wifiOnly = data['value'] as bool;
+      case 'pause':
+        // User paused all device downloads. The in-flight chapter's isCancelled
+        // picks this up and unwinds (left resumable); the drain loop then exits
+        // and the worker self-stops. The main side won't restart while the
+        // persisted pause flag is set.
+        _paused = true;
     }
   }
 
@@ -160,7 +171,7 @@ class DownloadTaskHandler extends TaskHandler {
   // ---------------------------------------------------------------------------
 
   Future<void> _drain() async {
-    while (!_stopping) {
+    while (!_stopping && !_paused) {
       final next = _queue.where((c) => !_cancelled.contains(c)).firstOrNull;
       if (next == null) {
         if (_sawNewWork) {
@@ -177,6 +188,14 @@ class DownloadTaskHandler extends TaskHandler {
       }
       _queue.remove(next);
       await _downloadChapter(next, _mangaOf[next]!);
+    }
+    // Exited because the user paused (not a stop/timeout): self-stop cleanly so
+    // the FGS notification clears. drift still has the queued/downloading rows
+    // (the in-flight chapter was cancelled, left resumable), so resume just
+    // re-enqueues from drift. Do NOT append a drained marker — the queue isn't
+    // drained, it's parked.
+    if (_paused && !_stopping) {
+      await FlutterForegroundTask.stopService();
     }
   }
 
@@ -211,7 +230,7 @@ class DownloadTaskHandler extends TaskHandler {
       mangaId: mangaId,
       chapterId: chapterId,
       pages: pages,
-      isCancelled: () => _cancelled.contains(chapterId) || _stopping,
+      isCancelled: () => _cancelled.contains(chapterId) || _stopping || _paused,
       onPageStored: (i, rel, bytes) {
         // Live per-page progress for the foreground UI (drift row applied by the
         // main isolate). The durable record is still the completion log.

@@ -5,13 +5,15 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../constants/gen/assets.gen.dart';
 import '../../constants/navigation_bar_data.dart';
+import '../../features/offline/data/offline_nav_status.dart';
 import '../../routes/router_config.dart';
 import '../../utils/extensions/custom_extensions.dart';
 
-class BigScreenNavigationBar extends StatelessWidget {
+class BigScreenNavigationBar extends ConsumerWidget {
   const BigScreenNavigationBar(
       {super.key,
       required this.selectedIndex,
@@ -26,16 +28,19 @@ class BigScreenNavigationBar extends StatelessWidget {
   static const double _extendedWidth = 256;
 
   NavigationRailDestination getNavigationRailDestination(
-      BuildContext context, NavigationBarData data) {
+      BuildContext context, NavigationBarData data, bool downloadsPaused) {
+    final badged = downloadsPaused && data.icon == Icons.download_outlined;
     return NavigationRailDestination(
-      icon: Icon(data.icon),
+      icon: badged ? Badge(child: Icon(data.icon)) : Icon(data.icon),
       label: Text(data.label(context)),
-      selectedIcon: Icon(data.activeIcon),
+      selectedIcon:
+          badged ? Badge(child: Icon(data.activeIcon)) : Icon(data.activeIcon),
     );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final downloadsPaused = ref.watch(downloadsPausedBadgeProvider);
     // The rail shows on any wide screen (width >= 600), which includes a phone
     // in landscape (short side < 600). There the height is tight, so drop the
     // app-icon header to make room for all destinations ("More" was falling off
@@ -95,7 +100,7 @@ class BigScreenNavigationBar extends StatelessWidget {
       leading: isPhone ? null : leadingIcon,
       destinations: NavigationBarData.getNavList(context)
           .map<NavigationRailDestination>(
-              (e) => getNavigationRailDestination(context, e))
+              (e) => getNavigationRailDestination(context, e, downloadsPaused))
           .toList(),
       selectedIndex: selectedIndex,
       onDestinationSelected: onDestinationSelected,

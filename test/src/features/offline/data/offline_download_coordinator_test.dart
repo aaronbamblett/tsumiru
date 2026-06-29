@@ -56,6 +56,7 @@ void main() {
     bool fail = false,
     bool auth401 = false,
     bool refreshOk = false,
+    bool Function()? persistedPaused,
   }) {
     final engine = ChapterDownloadEngine(
       writePage: store,
@@ -73,6 +74,7 @@ void main() {
       engine: engine,
       resolvePages: (_) async => pages,
       measureChapterBytes: store.chapterBytes,
+      persistedPaused: persistedPaused,
     );
   }
 
@@ -136,5 +138,54 @@ void main() {
     await db.setChapterDeviceState(1, OfflineDeviceState.downloading);
     await coord(pages: const ['/p/0', '/p/1']).pumpDownloads();
     expect((await db.chapterById(1))!.deviceState, OfflineDeviceState.downloaded);
+  });
+
+  test('paused pump does not download queued chapters', () async {
+    await seedChapter(1, 7, 2);
+    final c = coord(pages: const ['/p/0', '/p/1']);
+    await c.queueChapter(1);
+    c.pause();
+    await c.pumpDownloads();
+    expect((await db.chapterById(1))!.deviceState, OfflineDeviceState.queued);
+    expect(store.pages, isEmpty);
+  });
+
+  test('paused enqueueChapter is a no-op (no re-start of a stranded chapter)',
+      () async {
+    await seedChapter(1, 7, 2);
+    await db.setChapterDeviceState(1, OfflineDeviceState.downloading);
+    final c = coord(pages: const ['/p/0', '/p/1']);
+    c.pause();
+    await c.enqueueChapter((await db.chapterById(1))!);
+    // Left as-is (resumable), nothing written.
+    expect((await db.chapterById(1))!.deviceState,
+        OfflineDeviceState.downloading);
+    expect(store.pages, isEmpty);
+  });
+
+  test('resume after pause drains the queue', () async {
+    await seedChapter(1, 7, 2);
+    final c = coord(pages: const ['/p/0', '/p/1']);
+    await c.queueChapter(1);
+    c.pause();
+    await c.pumpDownloads(); // gated — no-op
+    expect((await db.chapterById(1))!.deviceState, OfflineDeviceState.queued);
+    await c.resume();
+    expect(
+        (await db.chapterById(1))!.deviceState, OfflineDeviceState.downloaded);
+  });
+
+  test('persisted pause flag gates the pump even on a fresh coordinator',
+      () async {
+    await seedChapter(1, 7, 2);
+    var paused = true; // simulates the saved flag after a restart
+    final c = coord(pages: const ['/p/0', '/p/1'], persistedPaused: () => paused);
+    await c.queueChapter(1);
+    await c.pumpDownloads();
+    expect((await db.chapterById(1))!.deviceState, OfflineDeviceState.queued);
+    paused = false; // user resumes
+    await c.pumpDownloads();
+    expect(
+        (await db.chapterById(1))!.deviceState, OfflineDeviceState.downloaded);
   });
 }

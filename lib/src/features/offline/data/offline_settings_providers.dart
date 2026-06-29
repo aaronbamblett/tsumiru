@@ -55,3 +55,13 @@ class OfflineWifiOnly extends _$OfflineWifiOnly
   @override
   bool? build() => initialize(DBKeys.downloadOnlyOverWifi);
 }
+
+/// User-initiated pause of all on-device downloads (persisted). The UI watches
+/// this for the Pause/Resume control + the global paused badge; the download
+/// starters gate on the persisted value directly (see [DBKeys.offlineDownloadsPaused]).
+@riverpod
+class OfflineDownloadsPaused extends _$OfflineDownloadsPaused
+    with SharedPreferenceClientMixin<bool> {
+  @override
+  bool? build() => initialize(DBKeys.offlineDownloadsPaused);
+}

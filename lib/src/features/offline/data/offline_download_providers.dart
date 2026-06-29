@@ -64,6 +64,43 @@ final downloadStarterProvider = Provider<Future<void> Function()>((ref) {
   };
 });
 
+/// Pause or resume ALL on-device downloads. Persists the flag (so it survives a
+/// restart) and acts immediately on the active pipeline: the FGS worker on
+/// Android, the main-isolate pump elsewhere. The persisted flag is what the
+/// download starters gate on, so no enqueue/connectivity/launch path can restart
+/// downloads while paused.
+Future<void> setOfflineDownloadsPaused(WidgetRef ref, bool paused) async {
+  ref.read(offlineDownloadsPausedProvider.notifier).update(paused);
+  if (isAndroidNative) {
+    final controller = ref.read(backgroundDownloadControllerProvider);
+    if (paused) {
+      await controller.pause();
+    } else {
+      await controller.resume();
+    }
+  } else {
+    final coordinator = ref.read(offlineDownloadCoordinatorProvider);
+    if (paused) {
+      coordinator?.pause();
+    } else {
+      coordinator?.resume();
+    }
+  }
+}
+
+/// True while any chapter is queued or downloading on this device — drives the
+/// On-device Pause/Resume control and the global paused badge. False when
+/// offline is unavailable.
+@riverpod
+Stream<bool> offlineHasPending(Ref ref) {
+  if (!ref.watch(offlineEnabledProvider)) return Stream.value(false);
+  return ref.watch(offlineDatabaseProvider).watchOfflineChapters().map(
+        (chapters) => chapters.any((c) =>
+            c.deviceState == OfflineDeviceState.queued ||
+            c.deviceState == OfflineDeviceState.downloading),
+      );
+}
+
 /// Live on-device download state for a chapter (none / queued / downloading /
 /// downloaded / error). Always `none` when offline is unavailable.
 @riverpod

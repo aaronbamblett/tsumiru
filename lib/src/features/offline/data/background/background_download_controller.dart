@@ -13,6 +13,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../../constants/db_keys.dart';
 import '../../../../constants/enum.dart';
 import '../../../../global_providers/global_providers.dart';
 import '../../../../utils/extensions/custom_extensions.dart';
@@ -99,6 +100,10 @@ class BackgroundDownloadController with WidgetsBindingObserver {
   /// active connection is metered, the service is not started.
   Future<void> ensureServiceRunning() async {
     if (!Platform.isAndroid) return;
+    // PAUSE GATE — first line so EVERY restart path inherits it: the public
+    // start, onEnqueued, replayOnResume, replayAtLaunchAndMaybeStart, _onDrained,
+    // _onServiceStopped, and the connectivity-resume branch all funnel here.
+    if (_isPaused()) return;
     if (_ensuring) return;
     _ensuring = true;
     try {
@@ -124,6 +129,12 @@ class BackgroundDownloadController with WidgetsBindingObserver {
 
       await _ensureNotificationPermission();
       await _writeWorkOrder(pending);
+      // Re-check the pause gate: a pause could have landed while we awaited the
+      // steps above (this call passed the gate at the top before the user
+      // paused). Without this, we'd start the service into a paused state, and
+      // pause() — which only messages a *running* service — would have skipped
+      // it because the service wasn't up yet.
+      if (_isPaused()) return;
       final res = await FlutterForegroundTask.startService(
         serviceTypes: [ForegroundServiceTypes.dataSync],
         notificationTitle: 'Downloading chapters',
@@ -153,6 +164,30 @@ class BackgroundDownloadController with WidgetsBindingObserver {
   /// Called after the caller has written drift `queued` for [chapterIds]. Just
   /// ensures the service owns the queue (it reads drift, not the argument).
   Future<void> onEnqueued(List<int> chapterIds) => ensureServiceRunning();
+
+  /// True when the user has paused all on-device downloads (persisted flag).
+  /// Read synchronously so the start gate can't be bypassed by an unhydrated
+  /// provider read.
+  bool _isPaused() =>
+      _ref.read(sharedPreferencesProvider).getBool(
+          DBKeys.offlineDownloadsPaused.name) ??
+      false;
+
+  /// Pause all on-device downloads: tell the worker to park the in-flight
+  /// chapter and self-stop. The caller persists the flag first; the start gate
+  /// in [ensureServiceRunning] then prevents any restart until [resume].
+  Future<void> pause() async {
+    if (!Platform.isAndroid) return;
+    if (await FlutterForegroundTask.isRunningService) {
+      // Graceful: the worker cancels the active chapter (left resumable) and
+      // self-stops. Never main-side stopService here — that would race the
+      // worker and could corrupt a half-written page.
+      FlutterForegroundTask.sendDataToTask({'op': 'pause'});
+    }
+  }
+
+  /// Resume on-device downloads (caller has cleared the persisted flag first).
+  Future<void> resume() => ensureServiceRunning();
 
   /// Tell the worker to drop a chapter (delete/cancel). The caller still does
   /// the actual drift/file delete; this only stops the in-flight download.

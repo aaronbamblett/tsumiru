@@ -86,6 +86,10 @@ OfflineDownloadCoordinator? offlineDownloadCoordinator(Ref ref) {
         (await repo.getChapterPages(chapterId: chapterId))?.pages ??
         const <String>[],
     measureChapterBytes: store.chapterBytes,
+    persistedPaused: () =>
+        ref.read(sharedPreferencesProvider).getBool(
+            DBKeys.offlineDownloadsPaused.name) ??
+        false,
   );
 }
 

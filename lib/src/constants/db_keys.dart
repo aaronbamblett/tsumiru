@@ -92,6 +92,10 @@ enum DBKeys {
   offlineDownloadConcurrency(2),
   // Restrict background downloads to Wi-Fi connections only.
   downloadOnlyOverWifi(false),
+  // User-initiated pause of all ON-DEVICE downloads. Persisted (an explicit
+  // pause shouldn't silently resume on restart); read synchronously by the
+  // download starters to gate every restart path.
+  offlineDownloadsPaused(false),
   // ON-DEVICE delete-on-read settings (frees device space; the server copy is
   // untouched). Independent of the server's "Delete chapters" settings.
   // whileReading: 0 = off, 1 = the just-read chapter, 2..5 = the Nth behind it.

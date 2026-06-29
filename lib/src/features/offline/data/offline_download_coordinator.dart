@@ -30,12 +30,26 @@ class OfflineDownloadCoordinator {
     required this.resolvePages,
     required this.engine,
     required this.measureChapterBytes,
+    this.persistedPaused,
   });
 
   final OfflineDatabase db;
   final PageUrlsResolver resolvePages;
   final ChapterDownloadEngine engine;
   final ChapterBytesMeasurer measureChapterBytes;
+
+  /// Reads the persisted "downloads paused" flag (injected so the pump survives
+  /// a restart with the pause intact, without the coordinator depending on
+  /// SharedPreferences directly). Null in tests = never persistently paused.
+  final bool Function()? persistedPaused;
+
+  /// In-session pause, set by [pause]/[resume] for an immediate brake. The gate
+  /// is the OR of this and the persisted flag, so a restart honours a saved
+  /// pause even though this resets to false.
+  bool _paused = false;
+
+  /// True when on-device downloads are paused (in-session or persisted).
+  bool get isPaused => _paused || (persistedPaused?.call() ?? false);
 
   /// Chapter currently being downloaded by the engine (in-memory). One at a
   /// time, so at most one entry.
@@ -61,6 +75,21 @@ class OfflineDownloadCoordinator {
     if (_active.contains(chapterId)) _cancelled.add(chapterId);
   }
 
+  /// Pause all on-device downloading: stop starting new chapters and cancel the
+  /// in-flight one (left `downloading` = resumable). The persisted flag is set
+  /// by the caller; this is the immediate in-session brake.
+  void pause() {
+    _paused = true;
+    _cancelled.addAll(_active);
+  }
+
+  /// Resume on-device downloading and drain the backlog. Returns the drain
+  /// future so callers can await it (the UI fires it and forgets).
+  Future<void> resume() {
+    _paused = false;
+    return pumpDownloads();
+  }
+
   /// Add a chapter to the persistent download queue (state `queued`). The pump
   /// starts it when it reaches the front. Skips chapters already downloaded or
   /// in flight.
@@ -81,6 +110,11 @@ class OfflineDownloadCoordinator {
   /// `downloading` by a previous run (e.g. an app kill) simply resumes.
   Future<void> enqueueChapter(OfflineChapter chapter) async {
     if (chapter.deviceState == OfflineDeviceState.downloaded) return;
+    // Paused: don't start (or re-start a stranded) chapter. Guarded here too —
+    // not just in pumpDownloads — because enqueueChapter's `finally` clears the
+    // chapter from `_cancelled`, so a stray pump could otherwise re-select a
+    // stranded `downloading` chapter and restart it while paused.
+    if (isPaused) return;
     if (_active.contains(chapter.id)) return;
     _active.add(chapter.id);
     try {
@@ -178,10 +212,12 @@ class OfflineDownloadCoordinator {
     // (two isolates writing the same files/catalog corrupts it). Downloads on
     // Android are driven by BackgroundDownloadController instead.
     if (isAndroidNative) return;
+    if (isPaused) return;
     if (_pumping) return;
     _pumping = true;
     try {
       while (true) {
+        if (isPaused) break;
         final next = await _nextChapter();
         if (next == null) break;
         await enqueueChapter(next);
