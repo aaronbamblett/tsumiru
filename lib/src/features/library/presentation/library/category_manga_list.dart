@@ -12,6 +12,7 @@ import '../../../../constants/app_sizes.dart';
 import '../../../../constants/enum.dart';
 import '../../../../routes/router_config.dart';
 import '../../../../utils/extensions/custom_extensions.dart';
+import '../../../../widgets/confirm_bulk_download_dialog.dart';
 import '../../../../widgets/emoticons.dart';
 import '../../../../widgets/manga_cover/grid/manga_cover_grid_tile.dart';
 import '../../../../widgets/manga_cover/list/manga_cover_descriptive_list_tile.dart';
@@ -183,6 +184,11 @@ class CategoryMangaList extends HookConsumerWidget {
                     onMarkUnread: () => markSelection(false),
                     onKeepOffline: () async {
                       final ids = selection.value.toList();
+                      if (ids.length > 1 &&
+                          !await confirmBulkDownload(context,
+                              summary: '${ids.length} series', toDevice: true)) {
+                        return;
+                      }
                       selection.value = const {};
                       final db = ref.read(offlineDatabaseProvider);
                       for (final id in ids) {
@@ -197,6 +203,12 @@ class CategoryMangaList extends HookConsumerWidget {
                     },
                     onDownloadToServer: () async {
                       final ids = selection.value.toList();
+                      if (ids.length > 1 &&
+                          !await confirmBulkDownload(context,
+                              summary: '${ids.length} series',
+                              toDevice: false)) {
+                        return;
+                      }
                       selection.value = const {};
                       final repo = ref.read(mangaBookRepositoryProvider);
                       final dl = ref.read(downloadsRepositoryProvider);
@@ -304,8 +316,8 @@ class _SelectionBar extends StatelessWidget {
           onPressed: onMarkUnread,
         ),
         IconButton(
-          tooltip: 'Keep offline (sync)',
-          icon: const Icon(Icons.download_for_offline_outlined),
+          tooltip: 'Keep on device (sync)',
+          icon: const Icon(Icons.save_alt_rounded),
           onPressed: onKeepOffline,
         ),
         IconButton(

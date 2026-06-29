@@ -12,6 +12,7 @@ import '../../../../features/offline/data/offline_download_providers.dart';
 import '../../../../features/offline/data/offline_repository.dart';
 import '../../../../utils/extensions/custom_extensions.dart';
 import '../../../../utils/misc/toast/toast.dart';
+import '../../../../widgets/confirm_bulk_download_dialog.dart';
 import '../../../../widgets/selection_action_bar.dart';
 import '../../data/downloads/downloads_repository.dart';
 import '../../data/manga_book/manga_book_repository.dart';
@@ -84,12 +85,17 @@ class MultiChaptersActionsBottomAppBar extends HookConsumerWidget {
         ),
         IconButton(
           tooltip: context.l10n.keepOffline,
-          icon: const Icon(Icons.download_for_offline_outlined),
+          icon: const Icon(Icons.save_alt_rounded),
           onPressed: () async {
             // Download FIRST, clear selection AFTER: clearing selection disposes
             // this bar, which would invalidate `ref` mid-loop and silently drop
             // the remaining downloads.
             final ids = selectedChapterList;
+            if (ids.length > kBulkDownloadConfirmThreshold &&
+                !await confirmBulkDownload(context,
+                    summary: '${ids.length} chapters', toDevice: true)) {
+              return;
+            }
             for (final id in ids) {
               await saveChapterToDevice(ref, id);
             }
@@ -100,10 +106,16 @@ class MultiChaptersActionsBottomAppBar extends HookConsumerWidget {
           tooltip: context.l10n.downloads,
           icon: const Icon(Icons.cloud_download_outlined),
           onPressed: () async {
+            final ids = selectedChapterList;
+            if (ids.length > kBulkDownloadConfirmThreshold &&
+                !await confirmBulkDownload(context,
+                    summary: '${ids.length} chapters', toDevice: false)) {
+              return;
+            }
             final result = await AsyncValue.guard(
               () => ref
                   .read(downloadsRepositoryProvider)
-                  .addChaptersBatchToDownloadQueue(selectedChapterList),
+                  .addChaptersBatchToDownloadQueue(ids),
             );
             if (context.mounted) {
               result.showToastOnError(ref.read(toastProvider));
