@@ -159,7 +159,8 @@ Future<void> recordReadingProgress(
         ),
   );
   if (offline && !result.hasError) {
-    await ref.read(offlineDatabaseProvider).clearProgressDirty(chapterId);
+    await ref.read(offlineDatabaseProvider).clearProgressDirtyIfUnchanged(
+        chapterId, lastPageRead: lastPageRead, isRead: isRead);
   }
 }
 
@@ -178,27 +179,18 @@ Future<void> recordBookmark(
         .read(offlineDatabaseProvider)
         .setChapterBookmark(chapterId, isBookmarked);
   }
-  // Bookmarks share the one `progressDirty` flag with read progress, so the
-  // row may also carry an offline read that hasn't reached the server. Push the
-  // full state (not just the bookmark) — otherwise clearing the flag below
-  // would silently drop that pending read progress.
-  final row = offline
-      ? await ref.read(offlineRepositoryProvider).chapterById(chapterId)
-      : null;
+  // Bookmark dirtiness is tracked separately from read progress, so push only
+  // the bookmark and clear only its flag — any pending offline read stays dirty
+  // and is flushed independently by pushPendingProgress.
   final result = await AsyncValue.guard(
     () => ref.read(mangaBookRepositoryProvider).putChapter(
           chapterId: chapterId,
-          patch: row == null
-              ? ChapterChange(isBookmarked: isBookmarked)
-              : ChapterChange(
-                  isBookmarked: isBookmarked,
-                  isRead: row.isRead,
-                  lastPageRead: row.lastPageRead,
-                ),
+          patch: ChapterChange(isBookmarked: isBookmarked),
         ),
   );
   if (offline && !result.hasError) {
-    await ref.read(offlineDatabaseProvider).clearProgressDirty(chapterId);
+    await ref.read(offlineDatabaseProvider).clearBookmarkDirtyIfUnchanged(
+        chapterId, isBookmarked: isBookmarked);
   }
 }
 
@@ -366,20 +358,34 @@ Future<void> pushPendingProgress(ProviderContainer container) async {
   // is marked read — deduplicated so we call trackProgress once per manga.
   final syncedReadMangaIds = <int>{};
 
-  for (final c in await db.dirtyProgressChapters()) {
+  for (final c in await db.dirtyChapters()) {
     final result = await AsyncValue.guard(
       () => repo.putChapter(
         chapterId: c.id,
         patch: ChapterChange(
-          lastPageRead: c.lastPageRead,
-          isRead: c.isRead,
-          isBookmarked: c.isBookmarked,
+          // Send only the locally-changed fields (null = omitted from the
+          // patch), so a progress sync never overwrites a server bookmark that
+          // hasn't down-synced, and a bookmark sync never overwrites pending
+          // read progress (#13).
+          lastPageRead: c.progressDirty ? c.lastPageRead : null,
+          isRead: c.progressDirty ? c.isRead : null,
+          isBookmarked: c.bookmarkDirty ? c.isBookmarked : null,
         ),
       ),
     );
     if (!result.hasError) {
-      await db.clearProgressDirty(c.id);
-      if (c.isRead) syncedReadMangaIds.add(c.mangaId);
+      // Clear each flag only if the row still holds what we just pushed — a
+      // newer local write that arrived during the push keeps its flag and
+      // re-syncs on the next pass (no silent data loss).
+      if (c.progressDirty) {
+        await db.clearProgressDirtyIfUnchanged(c.id,
+            lastPageRead: c.lastPageRead, isRead: c.isRead);
+      }
+      if (c.bookmarkDirty) {
+        await db.clearBookmarkDirtyIfUnchanged(c.id,
+            isBookmarked: c.isBookmarked);
+      }
+      if (c.progressDirty && c.isRead) syncedReadMangaIds.add(c.mangaId);
     }
   }
 

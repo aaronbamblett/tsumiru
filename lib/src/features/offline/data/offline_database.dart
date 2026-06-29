@@ -64,6 +64,13 @@ class OfflineChapters extends Table {
   BoolColumn get progressDirty =>
       boolean().withDefault(const Constant(false))();
 
+  /// True when this chapter's bookmark was toggled locally but not yet pushed
+  /// to the server. Tracked separately from [progressDirty] so a read-progress
+  /// sync can't clobber a server bookmark that hasn't down-synced yet, and a
+  /// bookmark sync can't clobber un-synced read progress (#13/#33).
+  BoolColumn get bookmarkDirty =>
+      boolean().withDefault(const Constant(false))();
+
   /// The server's last-read timestamp (epoch millis as a string, matching the
   /// server's LongString) — synced down so the offline library can sort by
   /// "Last Read". Server is the source of truth; this is never the device clock.
@@ -115,7 +122,7 @@ class OfflineDatabase extends _$OfflineDatabase {
   OfflineDatabase(super.e);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -132,6 +139,9 @@ class OfflineDatabase extends _$OfflineDatabase {
           }
           if (from < 4) {
             await m.addColumn(offlineChapters, offlineChapters.lastReadAt);
+          }
+          if (from < 5) {
+            await m.addColumn(offlineChapters, offlineChapters.bookmarkDirty);
           }
         },
       );
@@ -257,18 +267,46 @@ class OfflineDatabase extends _$OfflineDatabase {
         ),
       );
 
-  /// Clear the dirty flag after the progress was pushed to the server.
+  /// Clear the progress dirty flag after the progress was pushed to the server.
   Future<void> clearProgressDirty(int chapterId) =>
       (update(offlineChapters)..where((t) => t.id.equals(chapterId)))
           .write(const OfflineChaptersCompanion(progressDirty: Value(false)));
 
-  /// Record a local bookmark change. Reuses `progressDirty` so the bookmark is
-  /// pushed to the server on the next online sync, alongside read progress (#33).
+  /// Clear the bookmark dirty flag after the bookmark was pushed to the server.
+  Future<void> clearBookmarkDirty(int chapterId) =>
+      (update(offlineChapters)..where((t) => t.id.equals(chapterId)))
+          .write(const OfflineChaptersCompanion(bookmarkDirty: Value(false)));
+
+  /// Clear progressDirty only if the row still holds the exact values that were
+  /// pushed — so a newer local write that landed during the push isn't marked
+  /// clean and lost (the snapshot-then-clear race). A non-matching row keeps its
+  /// flag and re-syncs on the next pass.
+  Future<void> clearProgressDirtyIfUnchanged(int chapterId,
+          {required int lastPageRead, required bool isRead}) =>
+      (update(offlineChapters)
+            ..where((t) =>
+                t.id.equals(chapterId) &
+                t.lastPageRead.equals(lastPageRead) &
+                t.isRead.equals(isRead)))
+          .write(const OfflineChaptersCompanion(progressDirty: Value(false)));
+
+  /// Clear bookmarkDirty only if the bookmark still matches what was pushed —
+  /// same race guard as [clearProgressDirtyIfUnchanged].
+  Future<void> clearBookmarkDirtyIfUnchanged(int chapterId,
+          {required bool isBookmarked}) =>
+      (update(offlineChapters)
+            ..where((t) =>
+                t.id.equals(chapterId) & t.isBookmarked.equals(isBookmarked)))
+          .write(const OfflineChaptersCompanion(bookmarkDirty: Value(false)));
+
+  /// Record a local bookmark change. Marks `bookmarkDirty` (separate from
+  /// `progressDirty`) so the bookmark is pushed on the next online sync without
+  /// dragging stale read progress with it, and vice versa (#13/#33).
   Future<void> setChapterBookmark(int chapterId, bool isBookmarked) =>
       (update(offlineChapters)..where((t) => t.id.equals(chapterId))).write(
         OfflineChaptersCompanion(
           isBookmarked: Value(isBookmarked),
-          progressDirty: const Value(true),
+          bookmarkDirty: const Value(true),
         ),
       );
 
@@ -276,6 +314,13 @@ class OfflineDatabase extends _$OfflineDatabase {
   Future<List<OfflineChapter>> dirtyProgressChapters() =>
       (select(offlineChapters)..where((t) => t.progressDirty.equals(true)))
           .get();
+
+  /// Chapters with any unpushed local change — read progress OR bookmark — for
+  /// the up-sync to flush and the down-sync to preserve.
+  Future<List<OfflineChapter>> dirtyChapters() => (select(offlineChapters)
+        ..where((t) =>
+            t.progressDirty.equals(true) | t.bookmarkDirty.equals(true)))
+      .get();
 
   // --- offline queries -------------------------------------------------------
 

@@ -13,10 +13,13 @@ import 'package:tsumiru/src/features/offline/data/offline_sync.dart';
 import '../../../../helpers/offline_test_db.dart';
 
 ChapterDto serverChapter(int id,
-        {required int lastPageRead, required bool isRead}) =>
+        {required int lastPageRead,
+        required bool isRead,
+        bool isBookmarked = false}) =>
     Fragment$ChapterDto(
       id: id, mangaId: 1, name: 'c$id', chapterNumber: id.toDouble(),
-      sourceOrder: id, isRead: isRead, isBookmarked: false, isDownloaded: true,
+      sourceOrder: id, isRead: isRead, isBookmarked: isBookmarked,
+      isDownloaded: true,
       lastPageRead: lastPageRead, pageCount: 30, fetchedAt: '0', uploadDate: '0',
       lastReadAt: '0', url: '', meta: const <Fragment$ChapterDto$meta>[],
     );
@@ -64,7 +67,7 @@ void main() {
         .syncChapters([serverChapter(7, lastPageRead: 0, isRead: false)]);
     final c = await db.chapterById(7);
     expect(c!.isBookmarked, true); // local kept, not clobbered
-    expect(c.progressDirty, true); // still pending up-sync
+    expect(c.bookmarkDirty, true); // still pending up-sync
   });
 
   test('down-sync applies server progress for non-dirty chapters', () async {
@@ -74,5 +77,49 @@ void main() {
     final c = await db.chapterById(6);
     expect(c!.lastPageRead, 12);
     expect(c.isRead, true);
+  });
+
+  test('down-sync applies a server bookmark even while a read is pending (#13)',
+      () async {
+    // Local has a pending offline READ (progressDirty) but a stale bookmark;
+    // the server has since bookmarked the chapter (from another client). The
+    // old code pinned ALL of progress+bookmark to the local row whenever it was
+    // dirty, so the server bookmark was lost and the next up-sync clobbered it.
+    await seed(8, lastPageRead: 0);
+    await db.setChapterProgress(8, lastPageRead: 20, isRead: false);
+    await OfflineSync(db).syncChapters(
+        [serverChapter(8, lastPageRead: 0, isRead: false, isBookmarked: true)]);
+    final c = await db.chapterById(8);
+    expect(c!.isBookmarked, true); // server bookmark propagated, not clobbered
+    expect(c.lastPageRead, 20); // pending local read preserved
+    expect(c.progressDirty, true); // read still pending up-sync
+    expect(c.bookmarkDirty, false); // bookmark was not a local change
+  });
+
+  test('setChapterBookmark marks bookmarkDirty, not progressDirty', () async {
+    await seed(9);
+    await db.setChapterBookmark(9, true);
+    final c = await db.chapterById(9);
+    expect(c!.bookmarkDirty, true);
+    expect(c.progressDirty, false); // independent of read-progress dirtiness
+    expect((await db.dirtyChapters()).map((e) => e.id), [9]);
+    await db.clearBookmarkDirty(9);
+    expect(await db.dirtyChapters(), isEmpty);
+  });
+
+  test('clearProgressDirtyIfUnchanged keeps the flag when a newer write landed',
+      () async {
+    await seed(10);
+    await db.setChapterProgress(10, lastPageRead: 5, isRead: false);
+    // A newer local write arrives (e.g. during the up-sync push).
+    await db.setChapterProgress(10, lastPageRead: 9, isRead: false);
+    // Clearing with the OLD pushed values must NOT mark the newer row clean.
+    await db.clearProgressDirtyIfUnchanged(10, lastPageRead: 5, isRead: false);
+    final c = await db.chapterById(10);
+    expect(c!.progressDirty, true); // newer write still pending up-sync
+    expect(c.lastPageRead, 9);
+    // Clearing with the CURRENT values clears it.
+    await db.clearProgressDirtyIfUnchanged(10, lastPageRead: 9, isRead: false);
+    expect((await db.chapterById(10))!.progressDirty, false);
   });
 }

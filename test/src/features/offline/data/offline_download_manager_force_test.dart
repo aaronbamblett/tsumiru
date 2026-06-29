@@ -42,6 +42,7 @@ void main() {
         pinned: false,
         downloadedAt: null,
         progressDirty: false,
+        bookmarkDirty: false,
         updatedAt: DateTime(2026),
       );
 
