@@ -4,8 +4,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -23,11 +21,10 @@ import '../../../utils/launch_url_in_web.dart';
 import '../../../utils/misc/toast/toast.dart';
 import '../../../utils/theme/brand.dart';
 import '../../about/data/about_repository.dart';
-import '../../auth/data/auth_coordinator.dart';
+import '../../auth/presentation/sign_in_action.dart';
 import '../../settings/presentation/appearance/widgets/app_theme_selector/app_theme_selector.dart';
 import '../../settings/presentation/server/widget/client/server_port_tile/server_port_tile.dart';
 import '../../settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
-import '../../settings/presentation/server/widget/credential_popup/credentials_popup.dart';
 import '../data/onboarding_complete.dart';
 import '../data/server_discovery.dart';
 import '../data/server_resolver.dart';
@@ -171,8 +168,9 @@ class _StepDots extends StatelessWidget {
             width: i == active ? 22 : 8,
             height: 8,
             decoration: BoxDecoration(
-              color:
-                  i == active ? cs.primary : cs.onSurface.withValues(alpha: 0.22),
+              color: i == active
+                  ? cs.primary
+                  : cs.onSurface.withValues(alpha: 0.22),
               borderRadius: BorderRadius.circular(4),
             ),
           ),
@@ -326,57 +324,40 @@ class _ServerStep extends HookConsumerWidget {
       if (urlController.text != url) urlController.text = url;
     }
 
-    // Validate the entered credentials against [base] using [authChoice].
-    // Persists and returns true on success.
+    // Validate + commit the entered credentials against [base] using
+    // [authChoice], via the SAME performSignIn the Connection settings screen
+    // uses — the wizard must not run its own login path. Returns true
+    // on success; a thrown rejection (bad creds / wrong auth mode) reads as
+    // false. [client] is retained for the connection-probe callers above.
     Future<bool> validateCredentials(String base, http.Client client) async {
       final user = userController.text.trim();
       final pass = passController.text;
       if (user.isEmpty || pass.isEmpty) return false;
-      final coord = ref.read(authCoordinatorProvider.notifier);
-      try {
-        switch (authChoice.value) {
-          case AuthType.basic:
-            // Two gates: basicAuthConfirms proves it's really Suwayomi AND the
-            // Basic creds pass the transport (closes the "random 401 host"
-            // trap); authProbeAuthorized proves those creds actually authorise
-            // the @RequireAuth API. The second gate is what stops a wrong auth
-            // type "succeeding" against a ui_login/simple_login server, whose
-            // public aboutServer answers regardless of credentials.
-            if (!await basicAuthConfirms(base,
-                client: client, username: user, password: pass)) {
-              return false;
-            }
-            if (!await authProbeAuthorized(base,
-                client: client, basic: '$user:$pass')) {
-              return false;
-            }
-            await ref.read(credentialsProvider.notifier).set(
-                'Basic ${base64.encode(utf8.encode('$user:$pass'))}');
-          case AuthType.simpleLogin:
-            final cookie = await coord.verifySimpleCredentials(
-                serverBaseUrl: base, username: user, password: pass);
-            if (!await authProbeAuthorized(base,
-                client: client, cookie: cookie)) {
-              return false;
-            }
-            await coord.loginSimple(
-                serverBaseUrl: base, username: user, password: pass);
-          case AuthType.uiLogin:
-            final tokens = await coord.verifyUiCredentials(
-                gqlClient: ref.read(graphQlClientProvider),
-                username: user,
-                password: pass);
-            if (!await authProbeAuthorized(base,
-                client: client, bearer: tokens.accessToken)) {
-              return false;
-            }
-            await coord.loginUi(
-                gqlClient: ref.read(graphQlClientProvider),
-                username: user,
-                password: pass);
-          case AuthType.none:
-            return false;
+      if (authChoice.value == AuthType.none) return false;
+      // Basic auth has no login round-trip that can fail, so the wizard
+      // pre-flights it before committing: confirm it's really Suwayomi over
+      // Basic AND that these creds actually authorise the @RequireAuth API —
+      // otherwise picking the wrong auth type would "succeed" against a server
+      // whose public aboutServer answers regardless of credentials. ui/simple
+      // need no pre-flight: performSignIn's login round-trip throws on rejection.
+      if (authChoice.value == AuthType.basic) {
+        if (!await basicAuthConfirms(base,
+            client: client, username: user, password: pass)) {
+          return false;
         }
+        if (!await authProbeAuthorized(base,
+            client: client, basic: '$user:$pass')) {
+          return false;
+        }
+      }
+      try {
+        await performSignIn(
+          ref,
+          authType: authChoice.value,
+          serverBaseUrl: base,
+          username: user,
+          password: pass,
+        );
       } catch (_) {
         return false;
       }
@@ -589,8 +570,13 @@ class _ServerStep extends HookConsumerWidget {
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(46)),
         ),
         const SizedBox(height: 12),
-        ..._buildTestStatus(context, cs, state.value, resolvedUrl.value,
-            version.value, errorDetail.value,
+        ..._buildTestStatus(
+            context,
+            cs,
+            state.value,
+            resolvedUrl.value,
+            version.value,
+            errorDetail.value,
             shouldSuggestHttps(urlController.text.trim())),
         // Auth sub-form, revealed only when the server needs a login.
         if (state.value == _TestState.needsLogin) ...[
@@ -661,7 +647,8 @@ class _ServerStep extends HookConsumerWidget {
                     child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.login_rounded),
             label: Text(context.l10n.onboardingSignIn),
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(46)),
+            style:
+                FilledButton.styleFrom(minimumSize: const Size.fromHeight(46)),
           ),
         ],
         const SizedBox(height: 8),

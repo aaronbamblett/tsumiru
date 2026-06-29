@@ -4,8 +4,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -16,13 +14,13 @@ import '../../../../constants/enum.dart';
 import '../../../../features/auth/data/auth_coordinator.dart';
 import '../../../../features/auth/data/auth_credentials_store.dart';
 import '../../../../features/auth/data/auth_state.dart';
+import '../../../../features/auth/presentation/sign_in_action.dart';
 import '../../../../global_providers/global_providers.dart';
 import '../../../../utils/extensions/custom_extensions.dart';
 import '../../../../utils/misc/toast/toast.dart';
 import '../../../../widgets/section_title.dart';
 import '../server/widget/client/server_port_tile/server_port_tile.dart';
 import '../server/widget/client/server_url_tile/server_url_tile.dart';
-import '../server/widget/credential_popup/credentials_popup.dart';
 import '../server/widget/credential_popup/login_credentials_popup.dart';
 
 /// Connection-screen authentication, state-aware:
@@ -33,9 +31,6 @@ import '../server/widget/credential_popup/login_credentials_popup.dart';
 ///                             the same shape as the first-run (FTUE) flow.
 class InlineAuthSection extends HookConsumerWidget {
   const InlineAuthSection({super.key});
-
-  String _basicHeader(String user, String pass) =>
-      'Basic ${base64.encode(utf8.encode('$user:$pass'))}';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -61,13 +56,6 @@ class InlineAuthSection extends HookConsumerWidget {
           port: ref.read(serverPortProvider),
           addPort: ref.read(serverPortToggleProvider).ifNull(),
         );
-
-    Future<void> clearOtherCreds(AuthType keep) async {
-      final store = ref.read(authCredentialsStoreProvider.notifier);
-      if (keep != AuthType.uiLogin) await store.clearUiLoginTokens();
-      if (keep != AuthType.simpleLogin) await store.clearSimpleLoginCookie();
-      if (keep != AuthType.basic) await store.clearBasicCredentials();
-    }
 
     // Validate the entered credentials WITHOUT committing them.
     Future<void> testConnection() async {
@@ -114,32 +102,14 @@ class InlineAuthSection extends HookConsumerWidget {
       busy.value = true;
       message.value = null;
       try {
-        final user = username.text.trim();
-        ref.read(authUsernameProvider.notifier).update(user);
-        await clearOtherCreds(authType);
-        final coordinator = ref.read(authCoordinatorProvider.notifier);
-        switch (authType) {
-          case AuthType.basic:
-            await ref
-                .read(credentialsProvider.notifier)
-                .set(_basicHeader(user, password.text));
-          case AuthType.simpleLogin:
-            await coordinator.loginSimple(
-              serverBaseUrl: resolvedBaseUrl(),
-              username: user,
-              password: password.text,
-            );
-          case AuthType.uiLogin:
-            await coordinator.loginUi(
-              gqlClient: ref.read(graphQlClientProvider),
-              username: user,
-              password: password.text,
-            );
-          case AuthType.none:
-            break;
-        }
+        await performSignIn(
+          ref,
+          authType: authType,
+          serverBaseUrl: resolvedBaseUrl(),
+          username: username.text.trim(),
+          password: password.text,
+        );
         if (!context.mounted) return;
-        ref.read(needsReauthProvider.notifier).set(false);
         password.clear();
         isError.value = false;
         message.value = null;
@@ -290,7 +260,8 @@ class InlineAuthSection extends HookConsumerWidget {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: (busy.value || testing.value) ? null : testConnection,
+                    onPressed:
+                        (busy.value || testing.value) ? null : testConnection,
                     icon: testing.value
                         ? const SizedBox(
                             width: 16,
@@ -328,8 +299,7 @@ String _failureText(BuildContext context, TestConnectionFailureKind kind) =>
     switch (kind) {
       TestConnectionFailureKind.network =>
         context.l10n.authTestConnectionFailedNetwork,
-      TestConnectionFailureKind.tls =>
-        context.l10n.authTestConnectionFailedTls,
+      TestConnectionFailureKind.tls => context.l10n.authTestConnectionFailedTls,
       TestConnectionFailureKind.invalidCredentials =>
         context.l10n.authTestConnectionFailedAuth,
       TestConnectionFailureKind.wrongAuthMode =>
