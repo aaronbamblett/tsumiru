@@ -54,6 +54,10 @@ class MangaChapterList extends _$MangaChapterList {
     final repo = ref.watch(mangaBookRepositoryProvider);
     final refreshFromSource =
         ref.watch(refreshChaptersFromSourceProvider).ifNull();
+    // Tracks whether we actually scraped the source on this open. A source
+    // scrape (getChapterList) also populates the manga's description/metadata
+    // server-side, so afterwards we refresh MangaWithId to pick it up (#363).
+    var didSourceFetch = false;
     final result = await chaptersWithOfflineFallback(
       fetch: () async {
         // Read the chapters the server already has stored (like the WebUI).
@@ -65,7 +69,10 @@ class MangaChapterList extends _$MangaChapterList {
         }
         try {
           final fetched = await repo.getChapterList(mangaId);
-          if (fetched != null && fetched.isNotEmpty) return fetched;
+          if (fetched != null && fetched.isNotEmpty) {
+            didSourceFetch = true;
+            return fetched;
+          }
         } catch (_) {
           // Source down / gone — fall back to the server's stored chapters
           // instead of showing an empty list (issue #28).
@@ -82,6 +89,16 @@ class MangaChapterList extends _$MangaChapterList {
           (ref.read(offlineSyncProvider)?.syncChapters(result) ??
                   Future.value())
               .then((_) => reconcileManga(ref, mangaId)));
+    }
+    if (didSourceFetch) {
+      // The source scrape above also populated this manga's description and
+      // metadata server-side, but MangaWithId loaded BEFORE that with an empty
+      // description (the client never calls fetchManga). Refresh it so the
+      // details screen shows the metadata on first open instead of only after a
+      // manual refresh (#363). Deferred past this build so we don't invalidate a
+      // provider mid-build.
+      Future.microtask(
+          () => ref.invalidate(mangaWithIdProvider(mangaId: mangaId)));
     }
     return result;
   }
