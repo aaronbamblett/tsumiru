@@ -108,7 +108,9 @@ class MultiChaptersActionsBottomAppBar extends HookConsumerWidget {
             if (context.mounted) {
               result.showToastOnError(ref.read(toastProvider));
             }
-            await refresh(true);
+            // Downloading doesn't change the source chapter list — refresh from
+            // the server's stored chapters, no source re-scrape.
+            await refresh(false);
           },
         ),
         IconButton(
