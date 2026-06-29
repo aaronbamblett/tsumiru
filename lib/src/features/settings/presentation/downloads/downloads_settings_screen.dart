@@ -7,10 +7,13 @@ import '../../../../widgets/input_popup/domain/settings_prop_type.dart';
 import '../../../../widgets/input_popup/settings_prop_tile.dart';
 import '../../../../widgets/popup_widgets/radio_list_popup.dart';
 import '../../../../widgets/section_title.dart';
+import '../../../library/domain/category/category_model.dart';
+import '../../../library/presentation/category/controller/edit_category_controller.dart';
 import '../../controller/server_controller.dart';
 import '../../domain/settings/settings.dart';
 import 'data/delete_chapters_settings_repository.dart';
 import 'data/downloads_settings_repository.dart';
+import 'widgets/auto_download_categories_dialog.dart';
 
 /// Labels for the "after reading automatically delete" select (0 = disabled,
 /// N = the Nth chapter behind), matching the Suwayomi-WebUI wording.
@@ -95,6 +98,9 @@ class DownloadsSettingsScreen extends ConsumerWidget {
             const DeleteChaptersSettings();
     final serverDeleteController =
         ref.read(deleteChaptersSettingsControllerProvider.notifier);
+    // Categories for the auto-download include/exclude row (Komikku parity).
+    final categories =
+        ref.watch(categoryControllerProvider).valueOrNull ?? const <CategoryDto>[];
     return ListTileTheme(
       data: const ListTileThemeData(
         subtitleTextStyle: TextStyle(color: Colors.grey),
@@ -186,6 +192,16 @@ class DownloadsSettingsScreen extends ConsumerWidget {
                           downloadsSettingsDto.excludeEntryWithUnreadChapters,
                       onChanged:
                           repository.toggleExcludeEntryWithUnreadChapters,
+                    ),
+                  ),
+                  ListTile(
+                    enabled: downloadsSettingsDto.autoDownloadNewChapters,
+                    title: Text(context.l10n.autoDownloadCategories),
+                    subtitle: Text(
+                        autoDownloadCategoriesSummary(context, categories)),
+                    onTap: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => const AutoDownloadCategoriesDialog(),
                     ),
                   ),
                 ],
