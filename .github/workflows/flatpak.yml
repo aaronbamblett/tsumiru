@@ -5,7 +5,7 @@
 #   2. flatpak       — in the freedesktop container, package the prebuilt bundle
 #                      with flatpak-builder (via flatter), sign, and upload the
 #                      OSTree repo as a Pages artifact
-#   3. deploy        — publish the Pages artifact (-> tsumiru-app.github.io/tsumiru)
+#   3. deploy        — publish the Pages artifact (-> suwayomi.github.io/Suwayomi-Tsumiru)
 name: Flatpak
 
 on:
