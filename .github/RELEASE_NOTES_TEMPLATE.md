@@ -10,9 +10,10 @@ You'll need a running Suwayomi server. See [Getting started](https://tsumiru-app
 
 **Linux - Flatpak (recommended, auto-updates):**
 ```sh
-flatpak remote-add --if-not-exists tsumiru https://tsumiru-app.github.io/tsumiru/index.flatpakrepo
+flatpak remote-add --if-not-exists tsumiru https://suwayomi.github.io/Suwayomi-Tsumiru/index.flatpakrepo
 flatpak install tsumiru io.github.aaronbamblett.tsumiru
 ```
+> Added the `tsumiru` remote before? It may still point at the old `tsumiru-app.github.io` URL. Run `flatpak remote-delete tsumiru` first, then the commands above.
 
 **Linux - AppImage (portable):** download the `…-linux-x86_64.AppImage` below, `chmod +x`, run.
 
