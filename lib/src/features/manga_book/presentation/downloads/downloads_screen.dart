@@ -15,7 +15,6 @@ import '../../../../widgets/emoticons.dart';
 import '../../../offline/data/offline_download_providers.dart';
 import '../../../offline/data/offline_settings_providers.dart';
 import '../../../offline/presentation/offline_files_view.dart';
-import '../../data/downloads/downloads_repository.dart';
 import '../../domain/downloads/downloads_model.dart';
 import 'controller/downloads_controller.dart';
 import 'widgets/download_progress_list_tile.dart';
@@ -51,7 +50,7 @@ class DownloadsScreen extends HookConsumerWidget {
           if (!onDeviceTab && (downloadsChapterIds).isNotBlank)
             IconButton(
               onPressed: () => AsyncValue.guard(
-                ref.read(downloadsRepositoryProvider).clearDownloads,
+                ref.read(downloadsMapProvider.notifier).clearAll,
               ),
               icon: const Icon(Icons.delete_sweep_rounded),
             ),

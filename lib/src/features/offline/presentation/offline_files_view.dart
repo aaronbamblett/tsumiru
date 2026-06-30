@@ -16,6 +16,7 @@ import '../../../widgets/server_image.dart';
 import '../data/offline_database.dart';
 import '../data/offline_download_providers.dart';
 import '../data/offline_repository.dart';
+import 'keep_rule_picker.dart';
 import 'offline_settings_format.dart';
 
 typedef _SeriesRow = ({OfflineManga manga, int downloaded, int inFlight, int bytes});
@@ -313,39 +314,8 @@ class OfflineFilesView extends HookConsumerWidget {
   }
 
   Future<({OfflineKeepRule rule, int count})?> _pickRule(
-      BuildContext context) {
-    return showModalBottomSheet<({OfflineKeepRule rule, int count})>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final n in _bufferSizes)
-              ListTile(
-                leading: const Icon(Icons.bookmark_add_outlined),
-                title: Text(sheetContext.l10n.keepOfflineNextUnread(n)),
-                onTap: () => Navigator.pop(
-                    sheetContext, (rule: OfflineKeepRule.nUnread, count: n)),
-              ),
-            ListTile(
-              leading: const Icon(Icons.menu_book_outlined),
-              title: Text(sheetContext.l10n.keepOfflineAllUnread),
-              onTap: () => Navigator.pop(
-                  sheetContext, (rule: OfflineKeepRule.allUnread, count: 3)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.library_books_outlined),
-              title: Text(sheetContext.l10n.keepOfflineAll),
-              onTap: () => Navigator.pop(
-                  sheetContext, (rule: OfflineKeepRule.all, count: 3)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+          BuildContext context) =>
+      pickOfflineKeepRule(context);
 
   Future<bool> _confirm(BuildContext context, String message) async {
     return await showDialog<bool>(

@@ -26,9 +26,9 @@ import '../../../manga_book/data/manga_book/manga_book_repository.dart';
 import '../../../manga_book/domain/chapter_batch/chapter_batch_model.dart';
 import '../../../manga_book/domain/manga/manga_model.dart';
 import '../../../manga_book/presentation/manga_details/widgets/edit_manga_category_dialog.dart';
-import '../../../offline/data/offline_database.dart';
 import '../../../offline/data/offline_download_providers.dart';
 import '../../../offline/data/offline_repository.dart';
+import '../../../offline/presentation/keep_rule_picker.dart';
 import '../../../settings/presentation/appearance/widgets/grid_cover_width_slider/grid_cover_width_slider.dart';
 import '../../../tracking/domain/track_progress_gate.dart';
 import 'controller/library_controller.dart';
@@ -197,7 +197,13 @@ class CategoryMangaList extends HookConsumerWidget {
                     onMarkUnread: () => markSelection(false),
                     onKeepOffline: () async {
                       final ids = selection.value.toList();
+                      // Let the user choose how much to keep (next-N / all-unread
+                      // / all) instead of silently downloading every chapter —
+                      // picking "all" across a read library can queue thousands.
+                      final picked = await pickOfflineKeepRule(context);
+                      if (picked == null) return;
                       if (ids.length > 1 &&
+                          context.mounted &&
                           !await confirmBulkDownload(context,
                               summary: '${ids.length} series',
                               toDevice: true)) {
@@ -206,7 +212,7 @@ class CategoryMangaList extends HookConsumerWidget {
                       selection.value = const {};
                       final db = ref.read(offlineDatabaseProvider);
                       for (final id in ids) {
-                        await db.setKeepRule(id, OfflineKeepRule.all, 3);
+                        await db.setKeepRule(id, picked.rule, picked.count);
                         await reconcileMangaWidget(ref, id);
                       }
                       if (context.mounted) {

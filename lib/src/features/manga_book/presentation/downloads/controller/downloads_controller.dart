@@ -70,6 +70,18 @@ class DownloadsMap extends _$DownloadsMap {
         .reorderDownload(chapterId, to);
     state = getStateFromUpdates(downloadStatusDto);
   }
+
+  /// Clear the whole server download queue and empty the local map immediately.
+  /// The clear mutation doesn't reliably emit a per-chapter DEQUEUED stream for
+  /// a bulk clear, so without this the list stayed frozen until a manual
+  /// refresh (#73). Empty optimistically for instant feedback, then refetch the
+  /// authoritative status so a later rebuild can't resurrect the stale queue
+  /// from the cached snapshot.
+  Future<void> clearAll() async {
+    await ref.read(downloadsRepositoryProvider).clearDownloads();
+    state = {};
+    ref.invalidate(downloadStatusProvider);
+  }
 }
 
 @riverpod

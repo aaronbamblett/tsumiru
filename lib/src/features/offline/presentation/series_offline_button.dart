@@ -33,6 +33,9 @@ class SeriesOfflineButton extends ConsumerWidget {
     final inFlight = progress?.inFlight ?? 0;
     final onDevice = downloaded > 0;
     final downloading = inFlight > 0;
+    // Surface the active keep-rule on the button so users can see at a glance
+    // why a series keeps re-downloading, without opening the sheet (#74).
+    final config = ref.watch(mangaKeepConfigProvider(mangaId)).valueOrNull;
     return MangaActionButton(
       active: onDevice || downloading,
       icon: downloading
@@ -45,12 +48,24 @@ class SeriesOfflineButton extends ConsumerWidget {
               : Icons.download_for_offline_outlined),
       label: downloading
           ? context.l10n.offlineDownloadingCount(inFlight)
-          : onDevice
-              ? context.l10n.offlineOnDevice
-              : context.l10n.offlineDownloadAction,
+          : _ruleLabel(context, config?.rule, config?.count) ??
+              (onDevice
+                  ? context.l10n.offlineOnDevice
+                  : context.l10n.offlineDownloadAction),
       onPressed: () => _openSheet(context, ref, onDevice),
     );
   }
+
+  /// Label for an active keep-rule, or null when no rule is set (rule off) so
+  /// the caller falls back to the generic on-device / download label.
+  String? _ruleLabel(BuildContext context, OfflineKeepRule? rule, int? count) =>
+      switch (rule) {
+        OfflineKeepRule.all => context.l10n.keepOfflineAll,
+        OfflineKeepRule.allUnread => context.l10n.keepOfflineAllUnread,
+        OfflineKeepRule.nUnread =>
+          context.l10n.keepOfflineNextUnread(count ?? 5),
+        OfflineKeepRule.off || null => null,
+      };
 
   void _openSheet(BuildContext context, WidgetRef ref, bool onDevice) {
     final config = ref.read(mangaKeepConfigProvider(mangaId)).valueOrNull ??
