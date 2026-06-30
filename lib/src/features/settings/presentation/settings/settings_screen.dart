@@ -42,12 +42,9 @@ class SettingsScreen extends StatelessWidget {
           ListTile(
             title: Text(context.l10n.downloads),
             leading: const Icon(Icons.download_rounded),
+            // On-device (offline) downloads are now the "On-device" tab inside
+            // this screen, so there's no separate "Offline" entry.
             onTap: () => const DownloadsSettingsRoute().go(context),
-          ),
-          ListTile(
-            title: Text(context.l10n.offline),
-            leading: const Icon(Icons.offline_pin_rounded),
-            onTap: () => const OfflineSettingsRoute().go(context),
           ),
           ListTile(
             title: Text(context.l10n.reader),
