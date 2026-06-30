@@ -8,6 +8,7 @@ import 'dart:async'; // Completer + Timer — required by single-flight + proact
 
 import 'package:flutter/foundation.dart'; // debugPrint
 import 'package:graphql/client.dart';
+import 'package:http/http.dart' as http;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../constants/db_keys.dart';
@@ -17,6 +18,8 @@ import '../../../global_providers/global_providers.dart';
 // auth.graphql.dart, so we import the schema directly.
 import '../../../graphql/__generated__/schema.graphql.dart'
     show Input$LoginInput, Input$RefreshTokenInput;
+import '../../onboarding/data/server_resolver.dart'
+    show authProbeAuthorized, basicAuthConfirms;
 import 'auth_credentials_store.dart';
 import 'auth_state.dart';
 import 'graphql/__generated__/auth.graphql.dart';
@@ -94,8 +97,7 @@ TestConnectionFailure classifyAuthError(Object e) {
 /// `testConnection` to fall outside the class and broke compilation.
 sealed class RefreshOutcome {
   const RefreshOutcome();
-  const factory RefreshOutcome.success(String newAccessToken) =
-      RefreshSuccess;
+  const factory RefreshOutcome.success(String newAccessToken) = RefreshSuccess;
   const factory RefreshOutcome.authFailure() = RefreshAuthFailure;
   const factory RefreshOutcome.transientFailure(Object error) =
       RefreshTransientFailure;
@@ -498,7 +500,8 @@ class AuthCoordinator extends _$AuthCoordinator {
     // would resurrect dead credentials and break the now-active mode.
     // Single-flight protects us from duplicate refreshes but does NOT
     // protect us from stale-mode writes — that's this check's job.
-    final currentMode = ref.read(authTypeKeyProvider) ?? DBKeys.authType.initial;
+    final currentMode =
+        ref.read(authTypeKeyProvider) ?? DBKeys.authType.initial;
     if (currentMode != AuthType.uiLogin) {
       debugPrint(
           'refresh result discarded: auth mode changed to $currentMode mid-refresh');
@@ -560,10 +563,44 @@ class AuthCoordinator extends _$AuthCoordinator {
           username: username,
           password: password,
         );
+      } else if (authType == AuthType.basic) {
+        // basic_auth has no login round-trip — verify by probing WITH the
+        // Basic header (mirrors onboarding). First confirm it's really a
+        // Suwayomi server, then confirm the credentials actually authorise the
+        // @RequireAuth surface (which also fails when the server isn't on
+        // basic_auth, i.e. wrong mode).
+        final client = http.Client();
+        try {
+          final isSuwayomi = await basicAuthConfirms(
+            serverBaseUrl,
+            client: client,
+            username: username,
+            password: password,
+          );
+          if (!isSuwayomi) {
+            return const TestConnectionFailure(
+              TestConnectionFailureKind.network,
+              'no Suwayomi server reachable with those Basic credentials',
+            );
+          }
+          final authorized = await authProbeAuthorized(
+            serverBaseUrl,
+            client: client,
+            basic: '$username:$password',
+          );
+          if (!authorized) {
+            return const TestConnectionFailure(
+              TestConnectionFailureKind.invalidCredentials,
+              'Basic credentials were rejected',
+            );
+          }
+        } finally {
+          client.close();
+        }
       } else {
         return const TestConnectionFailure(
             TestConnectionFailureKind.unexpectedShape,
-            'testConnection only supports simpleLogin or uiLogin');
+            'testConnection only supports basic, simpleLogin or uiLogin');
       }
     } catch (e) {
       return classifyAuthError(e);
