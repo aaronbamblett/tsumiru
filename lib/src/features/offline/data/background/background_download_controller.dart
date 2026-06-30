@@ -78,7 +78,8 @@ class BackgroundDownloadController with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _workerEventCallback ??= _onWorkerEvent;
     FlutterForegroundTask.addTaskDataCallback(_workerEventCallback!);
-    _connSub ??= Connectivity().onConnectivityChanged.listen(_onConnectivityChanged);
+    _connSub ??=
+        Connectivity().onConnectivityChanged.listen(_onConnectivityChanged);
   }
 
   void dispose() {
@@ -169,8 +170,9 @@ class BackgroundDownloadController with WidgetsBindingObserver {
   /// Read synchronously so the start gate can't be bypassed by an unhydrated
   /// provider read.
   bool _isPaused() =>
-      _ref.read(sharedPreferencesProvider).getBool(
-          DBKeys.offlineDownloadsPaused.name) ??
+      _ref
+          .read(sharedPreferencesProvider)
+          .getBool(DBKeys.offlineDownloadsPaused.name) ??
       false;
 
   /// Pause all on-device downloads: tell the worker to park the in-flight
@@ -204,7 +206,8 @@ class BackgroundDownloadController with WidgetsBindingObserver {
   Future<void> onWifiOnlyChanged(bool value) async {
     if (!Platform.isAndroid) return;
     if (await FlutterForegroundTask.isRunningService) {
-      FlutterForegroundTask.sendDataToTask({'op': 'setWifiOnly', 'value': value});
+      FlutterForegroundTask.sendDataToTask(
+          {'op': 'setWifiOnly', 'value': value});
       if (value && await _isMetered()) {
         await FlutterForegroundTask.stopService();
       }
@@ -268,7 +271,8 @@ class BackgroundDownloadController with WidgetsBindingObserver {
       // completion log, replayed on resume.)
       case 'chapterStart':
         final id = data['chapterId'] as int;
-        unawaited(_db.setChapterDeviceState(id, OfflineDeviceState.downloading));
+        unawaited(
+            _db.setChapterDeviceState(id, OfflineDeviceState.downloading));
         // Record the resolved page total so the progress arc can show a real
         // fraction (only when known + currently unset/0, to avoid clobbering a
         // good catalog value).
@@ -355,7 +359,7 @@ class BackgroundDownloadController with WidgetsBindingObserver {
       serverBase: _ref.read(serverUrlProvider) ?? '',
       port: _ref.read(serverPortProvider),
       addPort: _ref.read(serverPortToggleProvider).ifNull(),
-      wifiOnly: _ref.read(offlineWifiOnlyProvider) ?? false,
+      wifiOnly: _ref.read(offlineWifiOnlyProvider) ?? true,
       auth: auth,
       baseDir: _paths.baseDir,
     );
@@ -422,7 +426,7 @@ class BackgroundDownloadController with WidgetsBindingObserver {
   /// True when Wi-Fi-only is set AND the active connection is metered — the
   /// condition under which we won't start the service.
   Future<bool> _wifiOnlyBlocks() async {
-    if (!(_ref.read(offlineWifiOnlyProvider) ?? false)) return false;
+    if (!(_ref.read(offlineWifiOnlyProvider) ?? true)) return false;
     return _isMetered();
   }
 
@@ -447,14 +451,15 @@ class BackgroundDownloadController with WidgetsBindingObserver {
   /// future in-worker gate but does not act on connection type today.
   void _onConnectivityChanged(List<ConnectivityResult> result) {
     if (!Platform.isAndroid) return;
-    final wifiOnly = _ref.read(offlineWifiOnlyProvider) ?? false;
+    final wifiOnly = _ref.read(offlineWifiOnlyProvider) ?? true;
     if (!wifiOnly) return;
     final hasUnmetered = result.contains(ConnectivityResult.wifi) ||
         result.contains(ConnectivityResult.ethernet);
     unawaited(() async {
       if (!hasUnmetered) {
         if (await FlutterForegroundTask.isRunningService) {
-          logger.i('Offline: dropped to metered with Wi-Fi-only — stopping FGS');
+          logger
+              .i('Offline: dropped to metered with Wi-Fi-only — stopping FGS');
           await FlutterForegroundTask.stopService();
         }
       } else {
@@ -494,8 +499,8 @@ class BackgroundDownloadController with WidgetsBindingObserver {
   }) =>
       TokenBroker(
         read: () async {
-          final raw = await FlutterForegroundTask.getData<String>(
-              key: kTokenRecordKey);
+          final raw =
+              await FlutterForegroundTask.getData<String>(key: kTokenRecordKey);
           if (raw != null) {
             return BackgroundTokenRecord.fromJson(
                 jsonDecode(raw) as Map<String, Object?>);

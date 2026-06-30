@@ -64,6 +64,7 @@ enum DBKeys {
   readerFeedbackToasts(true),
   volumeTap(false),
   volumeTapInvert(false),
+  keepScreenOn(true),
   hideEmptyCategory(false),
   // When false (default, Mihon-style), opening an entry shows the chapters the
   // server already has, without re-scraping the source. When true, also refresh
@@ -90,8 +91,9 @@ enum DBKeys {
   // How many chapter pages download at once. Low by default: a self-hosted
   // server saturates fast and starts returning 500/503 under heavy parallelism.
   offlineDownloadConcurrency(2),
-  // Restrict background downloads to Wi-Fi connections only.
-  downloadOnlyOverWifi(false),
+  // Restrict background downloads to Wi-Fi connections only. Default ON so a
+  // fresh install never burns mobile data on downloads unless the user opts in.
+  downloadOnlyOverWifi(true),
   // User-initiated pause of all ON-DEVICE downloads. Persisted (an explicit
   // pause shouldn't silently resume on restart); read synchronously by the
   // download starters to gate every restart path.

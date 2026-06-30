@@ -45,8 +45,7 @@ class OfflineSettingsScreen extends ConsumerWidget {
                       final confirmed = await showDialog<bool>(
                         context: context,
                         builder: (ctx) => AlertDialog(
-                          content:
-                              Text(context.l10n.offlineRemoveAllConfirm),
+                          content: Text(context.l10n.offlineRemoveAllConfirm),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(ctx, false),
@@ -80,12 +79,9 @@ class OfflineSettingsScreen extends ConsumerWidget {
                   SettingsPropTile(
                     title: context.l10n.downloadOverWifiOnly,
                     type: SettingsPropType.switchTile(
-                      value:
-                          ref.watch(offlineWifiOnlyProvider) ?? false,
+                      value: ref.watch(offlineWifiOnlyProvider) ?? true,
                       onChanged: (v) async {
-                        ref
-                            .read(offlineWifiOnlyProvider.notifier)
-                            .update(v);
+                        ref.read(offlineWifiOnlyProvider.notifier).update(v);
                         return null;
                       },
                     ),
@@ -97,8 +93,7 @@ class OfflineSettingsScreen extends ConsumerWidget {
                     type: SettingsPropType.numberSlider(
                       min: 1,
                       max: 8,
-                      value:
-                          ref.watch(offlineDownloadConcurrencyProvider) ?? 2,
+                      value: ref.watch(offlineDownloadConcurrencyProvider) ?? 2,
                       onChanged: (v) async {
                         ref
                             .read(offlineDownloadConcurrencyProvider.notifier)
@@ -152,16 +147,14 @@ class OfflineSettingsScreen extends ConsumerWidget {
                   ),
                   SettingsPropTile(
                     title: context.l10n.offlineKeepDaysLabel,
-                    subtitle: context.l10n.offlineDays(
-                        ref.watch(offlineKeepDaysProvider) ?? 30),
+                    subtitle: context.l10n
+                        .offlineDays(ref.watch(offlineKeepDaysProvider) ?? 30),
                     type: SettingsPropType.numberSlider(
                       min: 1,
                       max: 365,
                       value: ref.watch(offlineKeepDaysProvider) ?? 30,
                       onChanged: (v) async {
-                        ref
-                            .read(offlineKeepDaysProvider.notifier)
-                            .update(v);
+                        ref.read(offlineKeepDaysProvider.notifier).update(v);
                         return null;
                       },
                     ),
