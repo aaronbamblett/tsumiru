@@ -56,11 +56,40 @@ class DirectionalSwipeGestureHandler extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
+    // In vertical (webtoon / continuous / vertical-paged) modes the SingleTouch*
+    // swipe recognizers are dead no-ops — their handlers early-return for
+    // Axis.vertical (see :158 and :328), because chapter changes there are
+    // driven by scroll / infinite-scroll, not a horizontal swipe. But they still
+    // ENTER the gesture arena, and on a single-finger vertical drag they can win
+    // it away from the reader's ZoomView scale recognizer. On iOS the platform
+    // supplies no touch slop (DeviceGestureSettings.touchSlop is null), so the
+    // drag recognizer's 18px slop is crossed before ZoomView's 36px pan slop —
+    // the drag recognizer wins, ZoomView never starts its synthetic scroll, and
+    // forceHoldOnPointerDown leaves the list frozen. That is the confirmed
+    // iOS-only "webtoon won't scroll" bug. Since these recognizers do nothing in
+    // vertical mode, don't register them at all here, leaving ZoomView's scale
+    // recognizer the sole single-finger owner. Horizontal/paged modes keep them.
+    if (scrollDirection == Axis.vertical) {
+      return _wrapWithTapAndLongPress(child);
+    }
     final bool useAdvancedGestures =
         lastPageSwipeEnabled && !readerSwipeChapterToggle;
     return useAdvancedGestures
         ? _buildAdvancedGestureHandler(context)
         : _buildSimpleGestureHandler(context);
+  }
+
+  /// Tap + long-press wrapper shared by every mode. These don't fight
+  /// multi-touch, so they're always safe to layer over the reader content.
+  Widget _wrapWithTapAndLongPress(Widget child) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onLongPressStart: onLongPressStart,
+      onLongPressEnd: onLongPressEnd,
+      onLongPressMoveUpdate: onLongPressMoveUpdate,
+      onTap: onTap,
+      child: child,
+    );
   }
 
   /// Advanced gesture handler — single-touch pan recognizer for swipe-at-
@@ -88,14 +117,7 @@ class DirectionalSwipeGestureHandler extends HookWidget {
           },
         ),
       },
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onLongPressStart: onLongPressStart,
-        onLongPressEnd: onLongPressEnd,
-        onLongPressMoveUpdate: onLongPressMoveUpdate,
-        onTap: onTap,
-        child: child,
-      ),
+      child: _wrapWithTapAndLongPress(child),
     );
   }
 
@@ -134,14 +156,7 @@ class DirectionalSwipeGestureHandler extends HookWidget {
           },
         ),
       },
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onLongPressStart: onLongPressStart,
-        onLongPressEnd: onLongPressEnd,
-        onLongPressMoveUpdate: onLongPressMoveUpdate,
-        onTap: onTap,
-        child: child,
-      ),
+      child: _wrapWithTapAndLongPress(child),
     );
   }
 
