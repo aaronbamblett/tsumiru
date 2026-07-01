@@ -4,6 +4,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import 'dart:async';
+
+
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -12,17 +15,25 @@ import '../../../../../features/offline/data/offline_repository.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../data/category_repository.dart';
 import '../../../domain/category/category_model.dart';
+import '../../library/controller/library_controller.dart';
 
 part 'edit_category_controller.g.dart';
 
 @riverpod
 class CategoryController extends _$CategoryController {
   @override
-  Future<List<CategoryDto>?> build() => categoriesWithOfflineFallback(
-        fetch: () => ref.watch(categoryRepositoryProvider).getCategoryList(),
-        db: ref.watch(offlineDatabaseProvider),
-        offlineEnabled: ref.watch(offlineEnabledProvider),
-      );
+  Future<List<CategoryDto>?> build() async {
+    final result = await categoriesWithOfflineFallback(
+      fetch: () => ref.watch(categoryRepositoryProvider).getCategoryList(),
+      db: ref.watch(offlineDatabaseProvider),
+      offlineEnabled: ref.watch(offlineEnabledProvider),
+    );
+    final sync = ref.read(offlineSyncProvider);
+    if (sync != null && result != null) {
+      unawaited(sync.syncCategories(result));
+    }
+    return result;
+  }
 
   Future<AsyncValue<void>> deleteCategory(int categoryId) async {
     final response = await AsyncValue.guard(() => ref
@@ -97,12 +108,16 @@ AsyncValue<List<CategoryDto>?> nonZeroCategoryList(Ref ref) {
       .toList());
 }
 
-/// Categories shown as tabs on the Library screen: non-empty AND not hidden.
+/// Categories shown as tabs on the Library screen: non-empty, and hidden only
+/// when [showHiddenCategoriesProvider] is false (the default).
 /// The edit screen keeps using the full [categoryControllerProvider] so hidden
 /// categories stay listed there (struck-through) and can be unhidden.
 @riverpod
 AsyncValue<List<CategoryDto>?> visibleCategoryList(Ref ref) {
   final categoryList = ref.watch(nonZeroCategoryListProvider);
-  return categoryList.copyWithData((_) =>
-      categoryList.valueOrNull?.where((element) => !element.isHidden).toList());
+  final showHidden =
+      ref.watch(showHiddenCategoriesProvider).ifNull(false);
+  return categoryList.copyWithData((_) => categoryList.valueOrNull
+      ?.where((element) => showHidden || !element.isHidden)
+      .toList());
 }

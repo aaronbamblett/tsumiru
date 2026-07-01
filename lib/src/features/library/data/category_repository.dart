@@ -122,6 +122,19 @@ class CategoryRepository {
           .getData((data) => null);
 
   //  Manga
+  Future<List<MangaDto>?> getAllLibraryMangas() =>
+      ferryClient
+          .query$GetCategoryMangas(
+            Options$Query$GetCategoryMangas(
+              variables: Variables$Query$GetCategoryMangas(
+                filter: Input$MangaFilterInput(
+                  inLibrary: Input$BooleanFilterInput(equalTo: true),
+                ),
+              ),
+            ),
+          )
+          .getData((data) => data.mangas.nodes);
+
   Future<List<MangaDto>?> getMangasFromCategory({
     required int categoryId,
   }) =>

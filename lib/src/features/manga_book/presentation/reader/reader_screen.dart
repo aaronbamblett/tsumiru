@@ -16,6 +16,7 @@ import '../../../../constants/enum.dart';
 import '../../../../utils/extensions/custom_extensions.dart';
 import '../../../history/presentation/history_controller.dart';
 import '../../../library/presentation/library/controller/library_controller.dart';
+import '../../../library/presentation/library/controller/library_manga_list.dart';
 import '../../../offline/data/offline_download_providers.dart';
 import '../../../settings/presentation/incognito/incognito_mode.dart';
 import '../../../settings/presentation/reader/widgets/reader_ignore_safe_area_tile/reader_ignore_safe_area_tile.dart';
@@ -182,6 +183,7 @@ class ReaderScreen extends HookConsumerWidget {
           // even when the reader was opened directly (e.g. the continue-reading
           // button), bypassing the manga-details screen that would otherwise do
           // this on its own pop (#282).
+          ref.invalidate(libraryMangaListProvider);
           ref.invalidate(categoryMangaListProvider);
         }
       },

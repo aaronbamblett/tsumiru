@@ -10,7 +10,11 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../constants/app_sizes.dart';
 import '../../../features/manga_book/domain/manga/manga_model.dart';
 import '../../../utils/extensions/custom_extensions.dart';
+import '../../server_image.dart';
 import '../providers/manga_cover_providers.dart';
+
+// Suwayomi's local source uses this sentinel lang code.
+const _kLocalSourceLang = 'localsourcelang';
 
 class MangaBadgesRow extends ConsumerWidget {
   const MangaBadgesRow({
@@ -28,54 +32,124 @@ class MangaBadgesRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final downloadedBadge = ref.watch(downloadedBadgeProvider).ifNull(true);
     final unreadBadge = ref.watch(unreadBadgeProvider).ifNull(true);
-    // final languageBadge = ref.watch(languageBadgeProvider) .ifNull();
-    return Padding(
-      padding: padding ?? KEdgeInsets.a8.size,
+    final languageBadge = ref.watch(languageBadgeProvider).ifNull(false);
+    final useLangIcon = ref.watch(useLangIconProvider).ifNull(false);
+    final localBadge = ref.watch(localBadgeProvider).ifNull(false);
+    final sourceBadge = ref.watch(sourceBadgeProvider).ifNull(false);
+
+    final source = manga.source;
+    final isLocal = source?.lang == _kLocalSourceLang;
+    final langCode = source?.lang;
+    final hasLangBadge = languageBadge && langCode != null && !isLocal;
+    final hasLocalBadge = localBadge && isLocal;
+    final hasSourceBadge = sourceBadge && source != null && !isLocal;
+    final hasEndBadges = showCountBadges && (hasLangBadge || hasLocalBadge || hasSourceBadge);
+
+    // When we have end badges, expand the row to full width so the end cluster
+    // sits at the top-right corner (matching Komikku's badgesEnd placement).
+    Widget startBadges = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (!showCountBadges && manga.inLibrary.ifNull())
+          ClipRRect(
+            borderRadius: KBorderRadius.r8.radius,
+            child: MangaBadge(
+              icon: Icons.collections_bookmark_rounded,
+              color: context.theme.colorScheme.primary,
+              textColor: context.theme.colorScheme.onPrimary,
+            ),
+          ),
+        if (showCountBadges)
+          ClipRRect(
+            borderRadius: KBorderRadius.r8.radius,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (manga.unreadCount.isGreaterThan(0) && unreadBadge)
+                  MangaBadge(
+                    text: "${manga.unreadCount.getValueOnNullOrNegative()}",
+                    color: context.theme.colorScheme.primary,
+                    textColor: context.theme.colorScheme.onPrimary,
+                  ),
+                if (manga.downloadCount.isGreaterThan(0) && downloadedBadge)
+                  MangaBadge(
+                    text: "${manga.downloadCount.getValueOnNullOrNegative()}",
+                    color: context.theme.colorScheme.tertiary,
+                    textColor: context.theme.colorScheme.onTertiary,
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+
+    // Local non-null promotions — guards above ensure these are non-null
+    // when the corresponding badge is shown; the aliases enable type promotion.
+    final sourceNN = source;
+    final langCodeNN = langCode;
+
+    Widget endBadges = ClipRRect(
+      borderRadius: KBorderRadius.r8.radius,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (!showCountBadges && manga.inLibrary.ifNull())
-            ClipRRect(
-              borderRadius: KBorderRadius.r8.radius,
-              child: MangaBadge(
-                icon: Icons.collections_bookmark_rounded,
-                color: context.theme.colorScheme.primary,
-                textColor: context.theme.colorScheme.onPrimary,
-              ),
+          if (hasLangBadge && sourceNN != null && langCodeNN != null)
+            useLangIcon
+                ? _SourceIconBadge(iconUrl: sourceNN.iconUrl)
+                : MangaBadge(
+                    text: langCodeNN.toUpperCase(),
+                    color: context.theme.colorScheme.secondary,
+                    textColor: context.theme.colorScheme.onSecondary,
+                  ),
+          if (hasLocalBadge)
+            MangaBadge(
+              icon: Icons.folder_rounded,
+              color: context.theme.colorScheme.secondary,
+              textColor: context.theme.colorScheme.onSecondary,
             ),
-          if (showCountBadges) ...[
-            ClipRRect(
-              borderRadius: KBorderRadius.r8.radius,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (manga.unreadCount.isGreaterThan(0) && unreadBadge)
-                    MangaBadge(
-                      text: "${manga.unreadCount.getValueOnNullOrNegative()}",
-                      color: context.theme.colorScheme.primary,
-                      textColor: context.theme.colorScheme.onPrimary,
-                    ),
-                  if (manga.downloadCount.isGreaterThan(0) && downloadedBadge)
-                    MangaBadge(
-                      text: "${manga.downloadCount.getValueOnNullOrNegative()}",
-                      color: context.theme.colorScheme.tertiary,
-                      textColor: context.theme.colorScheme.onTertiary,
-                    ),
-                ],
-              ),
-            ),
-            if (needSpacer) const Spacer(),
-            // if ((manga.source?.lang?.code) != null && languageBadge)
-            //   ClipRRect(
-            //     borderRadius: KBorderRadius.r16.radius,
-            //     child: Badge(
-            //       text: manga.source!.lang!.code!,
-            //       color: context.theme.colorScheme.tertiary,
-            //       textColor: context.theme.colorScheme.onTertiary,
-            //     ),
-            //   )
-          ],
+          if (hasSourceBadge && sourceNN != null)
+            _SourceIconBadge(iconUrl: sourceNN.iconUrl),
         ],
+      ),
+    );
+
+    return Padding(
+      padding: padding ?? KEdgeInsets.a8.size,
+      child: hasEndBadges
+          ? Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                startBadges,
+                endBadges,
+              ],
+            )
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                startBadges,
+                if (showCountBadges && needSpacer) const Spacer(),
+              ],
+            ),
+    );
+  }
+}
+
+/// A small badge showing a source icon fetched from the server.
+class _SourceIconBadge extends StatelessWidget {
+  const _SourceIconBadge({required this.iconUrl});
+  final String iconUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: context.theme.colorScheme.surface,
+      child: Padding(
+        padding: KEdgeInsets.a4.size,
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: ServerImage(imageUrl: iconUrl, size: const Size.square(16)),
+        ),
       ),
     );
   }

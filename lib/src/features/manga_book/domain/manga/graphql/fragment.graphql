@@ -44,8 +44,12 @@ fragment MangaDto on MangaType {
   thumbnailUrl
   thumbnailUrlLastFetched
   title
+  categories {
+    nodes { id }
+  }
   trackRecords {
     totalCount
+    nodes { id trackerId status score }
   }
   unreadCount
   updateStrategy

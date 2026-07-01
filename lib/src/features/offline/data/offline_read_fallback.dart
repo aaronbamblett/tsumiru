@@ -4,7 +4,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import '../../../graphql/__generated__/schema.graphql.dart';
 import '../../library/domain/category/category_model.dart';
+import '../../library/domain/category/graphql/__generated__/fragment.graphql.dart';
 import '../../manga_book/domain/chapter/chapter_model.dart';
 import '../../manga_book/domain/manga/manga_model.dart';
 import 'offline_database.dart';
@@ -26,12 +28,18 @@ Future<List<MangaDto>?> libraryWithOfflineFallback({
     if (rows.isEmpty) rethrow;
     final lastReadByManga = await db.lastReadAtByManga();
     final firstUnreadByManga = await db.firstUnreadDownloadedChapterByManga();
+    // Load all category memberships in one pass keyed by mangaId
+    final categoryMap = <int, List<OfflineCategory>>{};
+    for (final m in rows) {
+      categoryMap[m.id] = await db.categoriesForManga(m.id);
+    }
     return [
       for (final m in rows)
         offlineMangaToDto(
           m,
           lastReadAt: lastReadByManga[m.id],
           firstUnread: firstUnreadByManga[m.id],
+          offlineCategories: categoryMap[m.id] ?? [],
         ),
     ];
   }
@@ -50,7 +58,8 @@ Future<MangaDto?> mangaWithOfflineFallback({
     final m = await db.mangaById(mangaId);
     if (m == null) rethrow;
     final count = (await db.chaptersForManga(mangaId)).length;
-    return offlineMangaToDto(m, chapterCount: count);
+    final cats = await db.categoriesForManga(mangaId);
+    return offlineMangaToDto(m, chapterCount: count, offlineCategories: cats);
   }
 }
 
@@ -87,6 +96,22 @@ Future<List<CategoryDto>?> categoriesWithOfflineFallback({
     if (!offlineEnabled) rethrow;
     final count = (await db.libraryManga()).length;
     if (count == 0) rethrow;
+    final storedCats = await db.allOfflineCategories();
+    if (storedCats.isNotEmpty) {
+      return [
+        for (final cat in storedCats)
+          Fragment$CategoryDto(
+            defaultCategory: cat.id == 0,
+            id: cat.id,
+            includeInDownload: Enum$IncludeOrExclude.UNSET,
+            includeInUpdate: Enum$IncludeOrExclude.UNSET,
+            name: cat.name,
+            order: cat.sortOrder,
+            mangas: Fragment$CategoryDto$mangas(totalCount: count),
+            meta: const <Fragment$CategoryDto$meta>[],
+          ),
+      ];
+    }
     return [offlineDefaultCategoryDto(count)];
   }
 }

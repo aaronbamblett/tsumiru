@@ -138,6 +138,31 @@ Future<void> _startApp() async {
     debugPrint('onboarding migration failed: $e\n$st');
   }
 
+  // 3.5) One-time: the Last-Read sort comparator was un-inverted so its
+  //    ascending/descending now match Komikku (ascending = oldest-read first).
+  //    A user whose CURRENT sort is Last-Read and who had an explicit direction
+  //    saved would otherwise see their order silently flip; flip their saved
+  //    direction once to preserve their view. Only touch it when they're on
+  //    Last-Read (direction is a global setting shared by every sort key), and
+  //    only when a direction was explicitly saved (unset users get the new
+  //    default, which already yields newest-first).
+  try {
+    const migratedKey = 'lastReadSortDirectionMigrated';
+    if (sharedPreferences.getBool(migratedKey) != true) {
+      final sortIdx = sharedPreferences.getInt('mangaSort');
+      // mangaSort default is Last-Read, so an unset value means Last-Read too.
+      final onLastRead =
+          sortIdx == null || sortIdx == MangaSort.lastRead.index;
+      final savedDir = sharedPreferences.getBool('mangaSortDirection');
+      if (onLastRead && savedDir != null) {
+        await sharedPreferences.setBool('mangaSortDirection', !savedDir);
+      }
+      await sharedPreferences.setBool(migratedKey, true);
+    }
+  } catch (e, st) {
+    debugPrint('lastRead sort direction migration failed: $e\n$st');
+  }
+
   // 4) Preload both auth providers BEFORE the first frame so synchronous reads
   //    (image widgets, GraphQL links) get populated state instead of
   //    AsyncLoading — which would produce tokenless requests that get cached

@@ -43,6 +43,22 @@ class CategoryMangaList extends HookConsumerWidget {
     final mangaList = ref.watch(provider);
     final displayMode = ref.watch(libraryDisplayModeProvider);
     final gridWidth = ref.watch(gridMinWidthProvider);
+    final isLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final portraitCols =
+        ref.watch(libraryPortraitColumnsProvider) ?? 0;
+    final landscapeCols =
+        ref.watch(libraryLandscapeColumnsProvider) ?? 0;
+    final fixedCols = isLandscape ? landscapeCols : portraitCols;
+    // gridDelegate: fixed count when the user set cols > 0, else Auto (width-based).
+    SliverGridDelegate libraryGridDelegate() => fixedCols > 0
+        ? SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: fixedCols,
+            crossAxisSpacing: 2.0,
+            mainAxisSpacing: 2.0,
+            childAspectRatio: 0.75,
+          )
+        : mangaCoverGridDelegate(gridWidth);
     refresh() => ref.invalidate(categoryMangaListProvider(categoryId));
     useEffect(() {
       if (mangaList.isNotLoading) refresh();
@@ -142,7 +158,7 @@ class CategoryMangaList extends HookConsumerWidget {
               ),
             ),
           DisplayMode.grid => GridView.builder(
-              gridDelegate: mangaCoverGridDelegate(gridWidth),
+              gridDelegate: libraryGridDelegate(),
               itemCount: items.length,
               itemBuilder: (context, index) => MangaCoverGridTile(
                 manga: items[index],
@@ -164,6 +180,20 @@ class CategoryMangaList extends HookConsumerWidget {
                 onLongPress: () => toggle(items[index].id),
                 onContinueReading: continueReadingFor(items[index]),
                 showBadges: true,
+              ),
+            ),
+          DisplayMode.coverOnly => GridView.builder(
+              gridDelegate: libraryGridDelegate(),
+              itemCount: items.length,
+              itemBuilder: (context, index) => MangaCoverGridTile(
+                manga: items[index],
+                selected: selection.value.contains(items[index].id),
+                onLongPress: () => toggle(items[index].id),
+                onPressed: () => open(items[index]),
+                onContinueReading: continueReadingFor(items[index]),
+                showCountBadges: true,
+                showTitle: false,
+                showDarkOverlay: false,
               ),
             ),
         };

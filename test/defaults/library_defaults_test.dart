@@ -7,8 +7,11 @@ void main() {
     expect(DBKeys.mangaSort.initial, MangaSort.lastRead);
   });
 
-  test('default sort direction stays ascending-toggle (most-recent-first for lastRead)', () {
-    expect(DBKeys.mangaSortDirection.initial, true);
+  test('default sort direction is descending (newest-read first for lastRead)', () {
+    // The lastRead comparator matches Komikku now (ascending = oldest-read
+    // first), so the default direction is descending to keep the library
+    // opening newest-read first.
+    expect(DBKeys.mangaSortDirection.initial, false);
   });
 
   test('downloaded badge is off by default', () {

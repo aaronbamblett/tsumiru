@@ -178,3 +178,13 @@ Future<List<Fragment$TrackerDto>> trackers(Ref ref) async {
   final repo = ref.watch(trackerRepositoryProvider);
   return await repo.getTrackers() ?? [];
 }
+
+/// The subset of [trackers] where [Fragment$TrackerDto.isLoggedIn] is true.
+///
+/// UI surfaces gated on this: tracker-score sort, per-tracker filter,
+/// by-track-status group. When the list is empty those surfaces stay hidden.
+@riverpod
+Future<List<Fragment$TrackerDto>> loggedInTrackers(Ref ref) async {
+  final all = await ref.watch(trackersProvider.future);
+  return all.where((t) => t.isLoggedIn).toList();
+}
