@@ -273,6 +273,9 @@
     "@displayMode": {
         "description": "Radio Group title to change manga Cover display in Library and Source Screens"
     },
+    "@displayModeCoverOnly": {
+        "description": "Radio button text for Manga Cover display mode - Cover-only grid"
+    },
     "@displayModeDescriptiveList": {
         "description": "Radio button text for Manga Cover display mode - Descriptive List"
     },
@@ -536,6 +539,12 @@
     },
     "@mangaSortLastUpdated": {
         "description": "Radio button text for Manga sort Type - Last Updated"
+    },
+    "@mangaSortRandom": {
+        "description": "Radio button text for Manga sort Type - Random (seeded shuffle; re-tap to re-roll)"
+    },
+    "@mangaSortTrackerScore": {
+        "description": "Radio button text for Manga sort Type - Tracker score (mean normalized 0–10)"
     },
     "@mangaSortTotalChapters": {
         "description": "Radio button text for Manga sort Type - Total Chapters"
@@ -1151,7 +1160,27 @@
     "backupTime": "Backup Time",
     "badges": "Badges",
     "bookmarked": "Bookmarked",
+    "categoryNumberOfItems": "Show number of items",
+    "@categoryNumberOfItems": {
+        "description": "Library Display > Tabs: checkbox to show a manga count next to each category tab label"
+    },
+    "categoryTabs": "Show category tabs",
+    "@categoryTabs": {
+        "description": "Library Display > Tabs: checkbox to show or hide the category tab bar"
+    },
+    "showHiddenCategories": "Show hidden categories",
+    "@showHiddenCategories": {
+        "description": "Library Display > Tabs: checkbox to include categories marked as hidden in the tab bar"
+    },
+    "tabs": "Tabs",
+    "@tabs": {
+        "description": "Library Display sheet section heading for tab-related toggles"
+    },
     "continueReadingButton": "Continue reading button",
+    "languageBadge": "Language",
+    "localBadge": "Local source",
+    "sourceBadge": "Source icon",
+    "useLangIcon": "Use source icon for language",
     "browse": "Browse",
     "buildTime": "Build time",
     "cacheCleared": "Cache Cleared",
@@ -1280,6 +1309,7 @@
     "discord": "Discord",
     "display": "Display",
     "displayMode": "Display Mode",
+    "displayModeCoverOnly": "Cover-only grid",
     "displayModeDescriptiveList": "Descriptive List",
     "displayModeGrid": "Grid",
     "displayModeList": "List",
@@ -1370,7 +1400,19 @@
     "@pureBlackAmoled": { "description": "AMOLED dark variant toggle" },
     "languages": "Languages",
     "latest": "Latest",
+    "lewd": "Lewd",
+    "@lewd": {
+        "description": "Library filter label: NSFW/lewd manga from adult sources"
+    },
     "library": "Library",
+    "libraryColumnsLandscape": "Columns (Landscape)",
+    "@libraryColumnsLandscape": {
+        "description": "Library Display section heading for the landscape column count slider"
+    },
+    "libraryColumnsPortrait": "Columns (Portrait)",
+    "@libraryColumnsPortrait": {
+        "description": "Library Display section heading for the portrait column count slider"
+    },
     "localSourceLocation": "Local source location",
     "localSourceLocationDescription": "The path to the directory on the server where local source files are saved in",
     "manga": "Manga",
@@ -1378,9 +1420,12 @@
     "mangaMissingSources": "Manga Missing Sources",
     "mangaSortAlphabetical": "Alphabetical",
     "mangaSortDateAdded": "Date Added",
-    "mangaSortLastChapterDate": "Last Chapter Date",
+    "mangaSortLastChapterDate": "Latest Chapter",
     "mangaSortLastRead": "Last Read",
-    "mangaSortLastUpdated": "Last Updated",
+    "mangaSortLastUpdated": "Chapter Fetch Date",
+    "mangaSortLastUpdate": "Last Update",
+    "mangaSortRandom": "Random",
+    "mangaSortTrackerScore": "Tracker score",
     "mangaSortTotalChapters": "Total Chapters",
     "mangaSortUnread": "Unread",
     "mangaStatusCancelled": "Cancelled",
@@ -2010,5 +2055,33 @@
     "trackPrivateBadge": "Private",
     "@trackPrivateBadge": {
         "description": "Badge shown on a private track record in the track editor header"
+    },
+    "group": "Group",
+    "@group": {
+        "description": "Label for the Group tab in the library organizer sheet (Filter/Sort/Display/Group)"
+    },
+    "groupByDefault": "Default",
+    "@groupByDefault": {
+        "description": "Group mode: by category (the existing category tabs behaviour)"
+    },
+    "groupBySource": "By source",
+    "@groupBySource": {
+        "description": "Group mode: one tab per manga source"
+    },
+    "groupByStatus": "By status",
+    "@groupByStatus": {
+        "description": "Group mode: one tab per publication status"
+    },
+    "groupUngrouped": "Ungrouped",
+    "@groupUngrouped": {
+        "description": "Group mode: single tab containing all library manga"
+    },
+    "groupByTrackStatus": "By track status",
+    "@groupByTrackStatus": {
+        "description": "Group mode: one tab per tracker status (Reading, Completed, etc.); gated on logged-in trackers"
+    },
+    "filterTracked": "Tracked",
+    "@filterTracked": {
+        "description": "Filter section heading shown when at least one tracker is logged in"
     }
 }

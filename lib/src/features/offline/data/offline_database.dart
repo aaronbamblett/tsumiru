@@ -26,6 +26,20 @@ class OfflineMangas extends Table {
       textEnum<OfflineKeepRule>().withDefault(Constant(OfflineKeepRule.off.name))();
   IntColumn get keepUnreadCount => integer().withDefault(const Constant(3))();
 
+  // Server-sourced metadata for offline filters / sort / badges / grouping.
+  TextColumn get sourceId => text().nullable()();
+  TextColumn get sourceName => text().nullable()();
+  TextColumn get sourceLang => text().nullable()();
+  BoolColumn get sourceIsNsfw => boolean().withDefault(const Constant(false))();
+  TextColumn get status => text().nullable()();
+  IntColumn get unreadCount => integer().withDefault(const Constant(0))();
+  IntColumn get downloadCount => integer().withDefault(const Constant(0))();
+  IntColumn get bookmarkCount => integer().withDefault(const Constant(0))();
+  TextColumn get inLibraryAt => text().nullable()();
+  TextColumn get latestFetchedAt => text().nullable()();
+  TextColumn get latestUploadedAt => text().nullable()();
+  IntColumn get totalChapters => integer().withDefault(const Constant(0))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -122,7 +136,7 @@ class OfflineDatabase extends _$OfflineDatabase {
   OfflineDatabase(super.e);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -152,6 +166,20 @@ class OfflineDatabase extends _$OfflineDatabase {
             await _addColumnIfMissing(
                 m, offlineChapters, offlineChapters.bookmarkDirty);
           }
+          if (from < 6) {
+            await _addColumnIfMissing(m, offlineMangas, offlineMangas.sourceId);
+            await _addColumnIfMissing(m, offlineMangas, offlineMangas.sourceName);
+            await _addColumnIfMissing(m, offlineMangas, offlineMangas.sourceLang);
+            await _addColumnIfMissing(m, offlineMangas, offlineMangas.sourceIsNsfw);
+            await _addColumnIfMissing(m, offlineMangas, offlineMangas.status);
+            await _addColumnIfMissing(m, offlineMangas, offlineMangas.unreadCount);
+            await _addColumnIfMissing(m, offlineMangas, offlineMangas.downloadCount);
+            await _addColumnIfMissing(m, offlineMangas, offlineMangas.bookmarkCount);
+            await _addColumnIfMissing(m, offlineMangas, offlineMangas.inLibraryAt);
+            await _addColumnIfMissing(m, offlineMangas, offlineMangas.latestFetchedAt);
+            await _addColumnIfMissing(m, offlineMangas, offlineMangas.latestUploadedAt);
+            await _addColumnIfMissing(m, offlineMangas, offlineMangas.totalChapters);
+          }
         },
       );
 
@@ -177,17 +205,40 @@ class OfflineDatabase extends _$OfflineDatabase {
     required String title,
     String? thumbnailUrl,
     required DateTime updatedAt,
+    String? sourceId,
+    String? sourceName,
+    String? sourceLang,
+    bool sourceIsNsfw = false,
+    String? status,
+    int unreadCount = 0,
+    int downloadCount = 0,
+    int bookmarkCount = 0,
+    String? inLibraryAt,
+    String? latestFetchedAt,
+    String? latestUploadedAt,
+    int totalChapters = 0,
   }) =>
       into(offlineMangas).insertOnConflictUpdate(
         OfflineMangasCompanion(
           id: Value(id),
           title: Value(title),
           updatedAt: Value(updatedAt),
-          // Don't write NULL over a good URL on a partial refresh; absent when
-          // the caller has no URL. thumbnailRelPath stays absent (device-managed).
           thumbnailUrl: thumbnailUrl == null
               ? const Value.absent()
               : Value(thumbnailUrl),
+          // device-managed: thumbnailRelPath, keepRule, keepUnreadCount stay absent
+          sourceId: Value(sourceId),
+          sourceName: Value(sourceName),
+          sourceLang: Value(sourceLang),
+          sourceIsNsfw: Value(sourceIsNsfw),
+          status: Value(status),
+          unreadCount: Value(unreadCount),
+          downloadCount: Value(downloadCount),
+          bookmarkCount: Value(bookmarkCount),
+          inLibraryAt: Value(inLibraryAt),
+          latestFetchedAt: Value(latestFetchedAt),
+          latestUploadedAt: Value(latestUploadedAt),
+          totalChapters: Value(totalChapters),
         ),
       );
 
@@ -232,6 +283,44 @@ class OfflineDatabase extends _$OfflineDatabase {
           sortOrder: Value(sortOrder),
         ),
       );
+
+  /// Replace a manga's full category membership atomically (delete-then-insert).
+  /// Safe to call with an empty list — just removes all memberships.
+  Future<void> replaceMangaCategories(int mangaId, List<int> categoryIds) =>
+      transaction(() async {
+        await (delete(offlineMangaCategories)
+              ..where((t) => t.mangaId.equals(mangaId)))
+            .go();
+        for (final catId in categoryIds) {
+          await into(offlineMangaCategories).insertOnConflictUpdate(
+            OfflineMangaCategoriesCompanion(
+              mangaId: Value(mangaId),
+              categoryId: Value(catId),
+            ),
+          );
+        }
+      });
+
+  /// Categories a manga belongs to (for the offline mapper).
+  Future<List<OfflineCategory>> categoriesForManga(int mangaId) async {
+    final query = select(offlineCategories).join([
+      innerJoin(
+        offlineMangaCategories,
+        offlineMangaCategories.categoryId.equalsExp(offlineCategories.id) &
+            offlineMangaCategories.mangaId.equals(mangaId),
+      ),
+    ])
+      ..orderBy([OrderingTerm(expression: offlineCategories.sortOrder)]);
+    return (await query.get())
+        .map((row) => row.readTable(offlineCategories))
+        .toList();
+  }
+
+  /// All persisted categories — for the offline category-list fallback.
+  Future<List<OfflineCategory>> allOfflineCategories() =>
+      (select(offlineCategories)
+            ..orderBy([(t) => OrderingTerm(expression: t.sortOrder)]))
+          .get();
 
   // --- device-managed mutations ---------------------------------------------
 

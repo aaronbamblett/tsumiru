@@ -20,6 +20,7 @@ import '../../../../utils/theme/brand.dart';
 import '../../../../widgets/emoticons.dart';
 import '../../../library/presentation/category/controller/edit_category_controller.dart';
 import '../../../library/presentation/library/controller/library_controller.dart';
+import '../../../library/presentation/library/controller/library_manga_list.dart';
 import '../../../migration/domain/migration_models.dart';
 import '../../domain/chapter/chapter_model.dart';
 import '../../widgets/chapter_actions/multi_chapters_actions_bottom_app_bar.dart';
@@ -130,6 +131,7 @@ class MangaDetailsScreen extends HookConsumerWidget {
     return PopScope(
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop && categoryId != null) {
+          ref.invalidate(libraryMangaListProvider);
           ref.invalidate(categoryMangaListProvider(categoryId!));
         }
       },

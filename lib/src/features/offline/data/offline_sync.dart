@@ -4,6 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import '../../library/domain/category/category_model.dart';
 import '../../manga_book/domain/chapter/chapter_model.dart';
 import '../../manga_book/domain/manga/manga_model.dart';
 import 'offline_database.dart';
@@ -24,7 +25,22 @@ class OfflineSync {
         title: manga.title,
         thumbnailUrl: manga.thumbnailUrl,
         updatedAt: DateTime.now(),
-      );
+        sourceId: manga.source?.id,
+        sourceName: manga.source?.name,
+        sourceLang: manga.source?.lang,
+        sourceIsNsfw: manga.source?.isNsfw ?? false,
+        status: manga.status.name,
+        unreadCount: manga.unreadCount,
+        downloadCount: manga.downloadCount,
+        bookmarkCount: manga.bookmarkCount,
+        inLibraryAt: manga.inLibraryAt,
+        latestFetchedAt: manga.latestFetchedChapter?.fetchedAt,
+        latestUploadedAt: manga.latestUploadedChapter?.uploadDate,
+        totalChapters: manga.chapters.totalCount,
+      ).then((_) => _db.replaceMangaCategories(
+            manga.id,
+            manga.categories.nodes.map((c) => c.id).toList(),
+          ));
 
   Future<void> syncChapters(List<ChapterDto> chapters) async {
     final now = DateTime.now();
@@ -86,6 +102,12 @@ class OfflineSync {
             lc.id,
       ];
       if (goneIds.isNotEmpty) await _db.markChaptersOrphaned(goneIds);
+    }
+  }
+
+  Future<void> syncCategories(List<CategoryDto> categories) async {
+    for (final cat in categories) {
+      await _db.upsertCategory(cat.id, cat.name, cat.order);
     }
   }
 }

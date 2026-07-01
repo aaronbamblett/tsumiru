@@ -81,7 +81,13 @@ enum MangaSort {
   lastUpdated,
   lastChapterDate,
   totalChapters,
-  lastRead;
+  lastRead,
+  random,
+  trackerScore,
+  // Appended (NOT reordered) — MangaSort prefs are stored by enum index, so
+  // reordering would corrupt saved sorts. Sort-tab display order is controlled
+  // separately (see library_manga_organizer.dart).
+  lastUpdate;
 
   String toLocale(BuildContext context) => switch (this) {
         MangaSort.alphabetical => context.l10n.mangaSortAlphabetical,
@@ -91,6 +97,9 @@ enum MangaSort {
         MangaSort.lastChapterDate => context.l10n.mangaSortLastChapterDate,
         MangaSort.totalChapters => context.l10n.mangaSortTotalChapters,
         MangaSort.lastRead => context.l10n.mangaSortLastRead,
+        MangaSort.random => context.l10n.mangaSortRandom,
+        MangaSort.trackerScore => context.l10n.mangaSortTrackerScore,
+        MangaSort.lastUpdate => context.l10n.mangaSortLastUpdate,
       };
 }
 
@@ -110,6 +119,7 @@ enum DisplayMode {
   grid(Icons.grid_view_rounded),
   list(Icons.view_list_rounded),
   descriptiveList(Icons.view_list_rounded),
+  coverOnly(Icons.view_comfy_rounded),
   ;
 
   static const List<DisplayMode> sourceDisplayList = [
@@ -123,7 +133,8 @@ enum DisplayMode {
   String toLocale(BuildContext context) => switch (this) {
         DisplayMode.grid => context.l10n.displayModeGrid,
         DisplayMode.list => context.l10n.displayModeList,
-        DisplayMode.descriptiveList => context.l10n.displayModeDescriptiveList
+        DisplayMode.descriptiveList => context.l10n.displayModeDescriptiveList,
+        DisplayMode.coverOnly => context.l10n.displayModeCoverOnly,
       };
 }
 

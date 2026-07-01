@@ -38,6 +38,9 @@ enum DBKeys {
   downloadedBadge(false),
   unreadBadge(true),
   languageBadge(false),
+  localBadge(false),
+  sourceBadge(false),
+  useLangIcon(false),
   // Library display: overlay a play button on covers that jumps straight into
   // the next unread chapter. Off by default, matching Mihon/Komikku/WebUI.
   showContinueReadingButton(false),
@@ -52,7 +55,9 @@ enum DBKeys {
   chapterFilterUnread(null),
   chapterFilterBookmarked(null),
   mangaSort(MangaSort.lastRead),
-  mangaSortDirection(true), // asc=true, dsc=false
+  // Default descending so the default Last-Read sort opens newest-read first
+  // (matches Komikku's last-read-descending). asc=true, dsc=false.
+  mangaSortDirection(false),
   chapterSort(ChapterSort.source),
   chapterSortDirection(false), // asc=true, dsc=false
   libraryDisplayMode(DisplayMode.grid),
@@ -112,6 +117,26 @@ enum DBKeys {
   dismissedUpdateVersion(''),
   updateProgressAfterReading(true),
   updateProgressManualMarkRead(true),
+  // Library grid: explicit column count per orientation. 0 = Auto (falls back
+  // to the width-based delegate using gridMangaCoverWidth as the target size).
+  libraryPortraitColumns(0),
+  libraryLandscapeColumns(0),
+  // Library Tabs section (Display sheet).
+  // When false, the category tab bar is hidden even if >1 category exists.
+  categoryTabs(true),
+  // When true, categories marked as hidden are still shown as tabs.
+  showHiddenCategories(false),
+  // When true, each tab label appends "(N)" where N is the filtered manga count.
+  categoryNumberOfItems(false),
+  // How the library tabs are grouped: 0=by category (default), 1=by source,
+  // 2=by status, 3=by track status (reserved; filled in Task 8), 4=ungrouped.
+  libraryGroupType(0),
+  mangaFilterLewd(null),
+  filterCategories(false),
+  filterCategoriesInclude(<String>[]),
+  filterCategoriesExclude(<String>[]),
+  // Seed for the Random library sort. Incrementing this re-rolls the order.
+  librarySortRandomSeed(0),
   ;
 
   const DBKeys(this.initial);

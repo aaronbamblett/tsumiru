@@ -12,7 +12,6 @@ import '../../../../../constants/enum.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../widgets/custom_checkbox_list_tile.dart';
 import '../../../../../widgets/manga_cover/providers/manga_cover_providers.dart';
-import '../../../../../widgets/popup_widgets/radio_list_popup.dart';
 import '../controller/library_controller.dart';
 
 class LibraryMangaDisplay extends ConsumerWidget {
@@ -21,29 +20,82 @@ class LibraryMangaDisplay extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final displayMode = ref.watch(libraryDisplayModeProvider);
+    final isLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+
+    // Whether the current display mode uses a grid (slider is relevant).
+    final isGridMode = displayMode == DisplayMode.grid ||
+        displayMode == DisplayMode.coverOnly;
+
+    final currentCols = (isLandscape
+            ? ref.watch(libraryLandscapeColumnsProvider)
+            : ref.watch(libraryPortraitColumnsProvider)) ??
+        0;
+
+    final selectedMode = displayMode ?? DBKeys.libraryDisplayMode.initial;
+
     return ListView(
+      shrinkWrap: true,
       children: [
-        ListTile(
-          title: Text(
-            context.l10n.displayMode,
-            style: context.textTheme.labelLarge,
+        _Heading(context.l10n.displayMode),
+        // Komikku uses a chip row (SettingsChipRow) for display mode, not a
+        // tall radio list — matches parity and keeps the sheet compact.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final mode in DisplayMode.values)
+                FilterChip(
+                  selected: selectedMode == mode,
+                  showCheckmark: false,
+                  label: Text(mode.toLocale(context)),
+                  onSelected: (_) => ref
+                      .read(libraryDisplayModeProvider.notifier)
+                      .update(mode),
+                ),
+            ],
           ),
-          dense: true,
         ),
-        RadioList<DisplayMode>(
-          optionList: DisplayMode.values,
-          getTitle: (value) => value.toLocale(context),
-          value: displayMode ?? DBKeys.libraryDisplayMode.initial,
-          onChange: (value) =>
-              ref.read(libraryDisplayModeProvider.notifier).update(value),
-        ),
-        ListTile(
-          title: Text(
-            context.l10n.badges,
-            style: context.textTheme.labelLarge,
+        if (isGridMode) ...[
+          _Heading(isLandscape
+              ? context.l10n.libraryColumnsLandscape
+              : context.l10n.libraryColumnsPortrait),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Row(
+              children: [
+                const Icon(Icons.grid_view_rounded, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Slider(
+                    value: currentCols.toDouble(),
+                    min: 0,
+                    max: 10,
+                    divisions: 10,
+                    label: currentCols == 0 ? 'Auto' : '$currentCols',
+                    onChanged: (val) => isLandscape
+                        ? ref
+                            .read(libraryLandscapeColumnsProvider.notifier)
+                            .update(val.round())
+                        : ref
+                            .read(libraryPortraitColumnsProvider.notifier)
+                            .update(val.round()),
+                  ),
+                ),
+                SizedBox(
+                  width: 40,
+                  child: Text(
+                    currentCols == 0 ? 'Auto' : '$currentCols',
+                    textAlign: TextAlign.end,
+                  ),
+                ),
+              ],
+            ),
           ),
-          dense: true,
-        ),
+        ],
+        _Heading(context.l10n.badges),
         CustomCheckboxListTile(
           title: context.l10n.downloaded,
           provider: downloadedBadgeProvider,
@@ -63,7 +115,71 @@ class LibraryMangaDisplay extends ConsumerWidget {
               ref.read(showContinueReadingButtonProvider.notifier).update,
           tristate: false,
         ),
+        CustomCheckboxListTile(
+          title: context.l10n.languageBadge,
+          provider: languageBadgeProvider,
+          onChanged: ref.read(languageBadgeProvider.notifier).update,
+          tristate: false,
+        ),
+        if (ref.watch(languageBadgeProvider).ifNull(false))
+          CustomCheckboxListTile(
+            title: context.l10n.useLangIcon,
+            provider: useLangIconProvider,
+            onChanged: ref.read(useLangIconProvider.notifier).update,
+            tristate: false,
+          ),
+        CustomCheckboxListTile(
+          title: context.l10n.localBadge,
+          provider: localBadgeProvider,
+          onChanged: ref.read(localBadgeProvider.notifier).update,
+          tristate: false,
+        ),
+        CustomCheckboxListTile(
+          title: context.l10n.sourceBadge,
+          provider: sourceBadgeProvider,
+          onChanged: ref.read(sourceBadgeProvider.notifier).update,
+          tristate: false,
+        ),
+        _Heading(context.l10n.tabs),
+        CustomCheckboxListTile(
+          title: context.l10n.categoryTabs,
+          provider: categoryTabsProvider,
+          onChanged: ref.read(categoryTabsProvider.notifier).update,
+          tristate: false,
+        ),
+        CustomCheckboxListTile(
+          title: context.l10n.showHiddenCategories,
+          provider: showHiddenCategoriesProvider,
+          onChanged: ref.read(showHiddenCategoriesProvider.notifier).update,
+          tristate: false,
+        ),
+        CustomCheckboxListTile(
+          title: context.l10n.categoryNumberOfItems,
+          provider: categoryNumberOfItemsProvider,
+          onChanged: ref.read(categoryNumberOfItemsProvider.notifier).update,
+          tristate: false,
+        ),
       ],
+    );
+  }
+}
+
+/// Compact section header matching Komikku's HeadingItem (24dp/tight padding,
+/// primary-tinted label), consistent with the filter tab's "Tracked" heading.
+class _Heading extends StatelessWidget {
+  const _Heading(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
+      child: Text(
+        text,
+        style: context.theme.textTheme.labelLarge?.copyWith(
+          color: context.theme.colorScheme.primary,
+        ),
+      ),
     );
   }
 }

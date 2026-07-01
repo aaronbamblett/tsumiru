@@ -60,19 +60,58 @@ class CustomCheckboxListTile<NotifierT extends AutoDisposeNotifier<bool?>>
   Widget build(BuildContext context, WidgetRef ref) {
     final val = ref.watch(provider);
     if (!tristate) {
-      return CheckboxListTile(
-        controlAffinity: ListTileControlAffinity.leading,
-        activeColor: context.theme.colorScheme.primary,
-        value: val.ifNull(true),
-        title: Text(title),
-        tristate: false,
-        onChanged: onChanged,
+      // Compact binary row using the SAME 24px check icon as the tri-state
+      // rows (not a Material Checkbox, whose ~48px forced tap target made the
+      // Display badges tower over the filter rows). 24dp/10dp padding keeps the
+      // whole organizer at one consistent density.
+      final checked = val.ifNull(true) ?? false;
+      return InkWell(
+        onTap: () => onChanged(!checked),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+          child: Row(
+            children: [
+              Icon(
+                checked
+                    ? Icons.check_box_rounded
+                    : Icons.check_box_outline_blank_rounded,
+                color: checked
+                    ? context.theme.colorScheme.primary
+                    : context.theme.unselectedWidgetColor,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  title,
+                  style: context.theme.textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
-    return ListTile(
-      leading: _tristateLeading(context, val),
-      title: Text(title),
+    // Compact tri-state row matching Komikku's TriStateItem
+    // (SettingsItemsPaddings: 24dp horizontal / 10dp vertical, icon + text)
+    // rather than a full-height ListTile, so the filter sheet is as dense as
+    // the reference.
+    return InkWell(
       onTap: () => onChanged(_nextValue(val)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+        child: Row(
+          children: [
+            _tristateLeading(context, val),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: context.theme.textTheme.bodyMedium,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

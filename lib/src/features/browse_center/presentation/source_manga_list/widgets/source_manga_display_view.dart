@@ -84,7 +84,14 @@ class SourceMangaDisplayView extends ConsumerWidget {
           controller: controller,
           source: source,
           toggleFavorite: toggleFavorite,
-        )
+        ),
+      DisplayMode.coverOnly => SourceMangaGridView(
+          sourceId: sourceId,
+          sourceType: sourceType,
+          controller: controller,
+          source: source,
+          toggleFavorite: toggleFavorite,
+        ),
     };
   }
 }

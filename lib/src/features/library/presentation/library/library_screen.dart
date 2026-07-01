@@ -11,20 +11,49 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../../constants/app_sizes.dart';
+import '../../../../constants/enum.dart';
 import '../../../../routes/router_config.dart';
 import '../../../../utils/extensions/custom_extensions.dart';
 import '../../../../utils/misc/toast/toast.dart';
 import '../../../../widgets/emoticons.dart';
+import '../../../../widgets/manga_cover/grid/manga_cover_grid_tile.dart';
+import '../../../../widgets/manga_cover/list/manga_cover_descriptive_list_tile.dart';
+import '../../../../widgets/manga_cover/list/manga_cover_list_tile.dart';
 import '../../../../widgets/search_field.dart';
 import '../../../manga_book/widgets/update_status_popup_menu.dart';
+import '../../../settings/presentation/appearance/widgets/grid_cover_width_slider/grid_cover_width_slider.dart';
+import '../../domain/category/category_model.dart';
+import '../../domain/library_group.dart';
 import '../category/controller/edit_category_controller.dart';
 import 'category_manga_list.dart';
 import 'controller/library_controller.dart';
+import 'controller/library_grouping.dart';
+import 'controller/library_manga_list.dart';
 import 'widgets/library_manga_organizer.dart';
 
 class LibraryScreen extends HookConsumerWidget {
   const LibraryScreen({super.key, required this.categoryId});
   final int categoryId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final groupType =
+        ref.watch(libraryGroupTypeProvider) ?? kDefaultLibraryGroupType;
+
+    if (groupType == LibraryGroup.byDefault) {
+      return _DefaultLibraryScreen(categoryId: categoryId);
+    }
+
+    return _GroupedLibraryScreen(groupType: groupType);
+  }
+}
+
+// ─────────────────── BY_DEFAULT (unchanged behaviour) ───────────────────────
+
+class _DefaultLibraryScreen extends HookConsumerWidget {
+  const _DefaultLibraryScreen({required this.categoryId});
+  final int categoryId;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final toast = ref.watch(toastProvider);
@@ -79,10 +108,13 @@ class LibraryScreen extends HookConsumerWidget {
                           )
                         ],
                       ),
-                bottom: data.length.isGreaterThan(1)
+                bottom: data.length.isGreaterThan(1) &&
+                        ref.watch(categoryTabsProvider).ifNull(true)
                     ? TabBar(
                         isScrollable: true,
-                        tabs: data.map((e) => Tab(text: e.name)).toList(),
+                        tabs: data
+                            .map((e) => _CategoryTab(category: e))
+                            .toList(),
                         dividerColor: Colors.transparent,
                       )
                     : null,
@@ -106,13 +138,10 @@ class LibraryScreen extends HookConsumerWidget {
                                     borderRadius: KBorderRadius.rT16.radius,
                                   ),
                                   clipBehavior: Clip.hardEdge,
-                                  // Taller than the default (~0.56) so the
-                                  // Display tab's options all fit without a
-                                  // cramped scroll.
-                                  builder: (_) => const FractionallySizedBox(
-                                    heightFactor: 0.72,
-                                    child: LibraryMangaOrganizer(),
-                                  ),
+                                  // The organizer sizes itself to the active
+                                  // tab's content (capped at 72% height), so no
+                                  // fixed-height wrapper.
+                                  builder: (_) => const LibraryMangaOrganizer(),
                                 );
                               }
                             },
@@ -166,6 +195,246 @@ class LibraryScreen extends HookConsumerWidget {
         ),
         body: body,
       ),
+    );
+  }
+}
+
+// ─────────────────── non-default group modes ────────────────────────────────
+
+class _GroupedLibraryScreen extends HookConsumerWidget {
+  const _GroupedLibraryScreen({required this.groupType});
+  final int groupType;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final toast = ref.watch(toastProvider);
+    final groupedTabsAsync = ref.watch(libraryGroupedTabsProvider);
+    final showSearch = useState(false);
+    useEffect(() {
+      groupedTabsAsync.showToastOnError(toast, withMicrotask: true);
+      return;
+    }, [groupedTabsAsync.valueOrNull]);
+
+    return groupedTabsAsync.showUiWhenData(
+      context,
+      (tabs) {
+        if (tabs.isEmpty) {
+          return Scaffold(
+            appBar: AppBar(title: Text(context.l10n.library)),
+            body: Emoticons(
+              title: context.l10n.noCategoriesFound,
+              button: TextButton(
+                onPressed: () =>
+                    ref.refresh(libraryGroupedTabsProvider.future),
+                child: Text(context.l10n.refresh),
+              ),
+            ),
+          );
+        }
+        return DefaultTabController(
+          // Key on the tab set so the controller fully rebuilds (resetting the
+          // selected index to 0) when the group mode changes the tab count.
+          // Without this, switching e.g. By Source (many tabs) → By Status
+          // (fewer) leaves the controller's index out of range and it churns
+          // into an infinite rebuild flicker.
+          key: ValueKey('group-$groupType-${tabs.length}'),
+          length: tabs.length,
+          child: Scaffold(
+            appBar: AppBar(
+              title: !showSearch.value
+                  ? Text(context.l10n.library)
+                  : SearchField(
+                      initialText: ref.read(libraryQueryProvider),
+                      onChanged: (val) =>
+                          ref.read(libraryQueryProvider.notifier).update(val),
+                      onClose: () => showSearch.value = (false),
+                    ),
+              bottom: tabs.length > 1
+                  ? TabBar(
+                      isScrollable: true,
+                      tabs: tabs.map((t) => Tab(text: t.name)).toList(),
+                      dividerColor: Colors.transparent,
+                    )
+                  : null,
+              actions: showSearch.value
+                  ? [SizedBox.shrink()]
+                  : [
+                      IconButton(
+                        onPressed: () => showSearch.value = (true),
+                        icon: const Icon(Icons.search_rounded),
+                      ),
+                      Builder(
+                        builder: (context) => IconButton(
+                          onPressed: () {
+                            if (context.isTablet) {
+                              Scaffold.of(context).openEndDrawer();
+                            } else {
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: KBorderRadius.rT16.radius,
+                                ),
+                                clipBehavior: Clip.hardEdge,
+                                builder: (_) => const LibraryMangaOrganizer(),
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.filter_list_rounded),
+                        ),
+                      ),
+                    ],
+            ),
+            endDrawerEnableOpenDragGesture: false,
+            endDrawer: const Drawer(
+              width: kDrawerWidth,
+              shape: RoundedRectangleBorder(),
+              child: LibraryMangaOrganizer(),
+            ),
+            body: Padding(
+              padding: KEdgeInsets.h8.size,
+              child: TabBarView(
+                children: tabs
+                    .map((t) => _GroupedMangaList(tabId: t.id))
+                    .toList(),
+              ),
+            ),
+          ),
+        );
+      },
+      refresh: () => ref.refresh(libraryGroupedTabsProvider.future),
+      wrapper: (body) => Scaffold(
+        appBar: AppBar(title: Text(context.l10n.library)),
+        body: body,
+      ),
+    );
+  }
+}
+
+// ─────────────────── widgets ────────────────────────────────────────────────
+
+/// A Tab widget for a single library category.
+///
+/// When [categoryNumberOfItemsProvider] is on, it watches the per-category
+/// filtered manga list (the SAME provider that [CategoryMangaList] uses) and
+/// appends "(N)" to the label so the count reflects the currently active query
+/// and filter state — including offline mode where server totalCount is stale.
+class _CategoryTab extends ConsumerWidget {
+  const _CategoryTab({required this.category});
+  final CategoryDto category;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final showCount =
+        ref.watch(categoryNumberOfItemsProvider).ifNull(false);
+    if (!showCount) {
+      return Tab(text: category.name);
+    }
+    final mangaListAsync = ref.watch(
+      categoryMangaListWithQueryAndFilterProvider(
+        categoryId: category.id,
+      ),
+    );
+    final count = mangaListAsync.valueOrNull?.length;
+    final label =
+        count != null ? '${category.name} ($count)' : category.name;
+    return Tab(text: label);
+  }
+}
+
+/// A manga grid/list for a non-default group tab (BY_SOURCE, BY_STATUS,
+/// UNGROUPED), fed from [groupedMangaListWithQueryAndFilterProvider].
+class _GroupedMangaList extends ConsumerWidget {
+  const _GroupedMangaList({required this.tabId});
+  final int tabId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mangaListAsync = ref.watch(
+      groupedMangaListWithQueryAndFilterProvider(tabId: tabId),
+    );
+    final displayMode = ref.watch(libraryDisplayModeProvider);
+    final gridWidth = ref.watch(gridMinWidthProvider);
+    final isLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final portraitCols = ref.watch(libraryPortraitColumnsProvider) ?? 0;
+    final landscapeCols = ref.watch(libraryLandscapeColumnsProvider) ?? 0;
+    final fixedCols = isLandscape ? landscapeCols : portraitCols;
+
+    SliverGridDelegate gridDelegate() => fixedCols > 0
+        ? SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: fixedCols,
+            crossAxisSpacing: 2.0,
+            mainAxisSpacing: 2.0,
+            childAspectRatio: 0.75,
+          )
+        : mangaCoverGridDelegate(gridWidth);
+
+    return mangaListAsync.showUiWhenData(
+      context,
+      (data) {
+        if (data == null || data.isEmpty) {
+          return Emoticons(title: context.l10n.noCategoryMangaFound);
+        }
+        final items = data;
+        return RefreshIndicator(
+          onRefresh: () async => ref.refresh(libraryMangaListProvider),
+          child: switch (displayMode) {
+            DisplayMode.list || null => ListView.builder(
+                itemExtent: 96,
+                itemCount: items.length,
+                itemBuilder: (context, index) => MangaCoverListTile(
+                  manga: items[index],
+                  selected: false,
+                  onPressed: () =>
+                      MangaRoute(mangaId: items[index].id).push(context),
+                  onLongPress: () {},
+                  showCountBadges: true,
+                ),
+              ),
+            DisplayMode.grid => GridView.builder(
+                gridDelegate: gridDelegate(),
+                itemCount: items.length,
+                itemBuilder: (context, index) => MangaCoverGridTile(
+                  manga: items[index],
+                  selected: false,
+                  onLongPress: () {},
+                  onPressed: () =>
+                      MangaRoute(mangaId: items[index].id).push(context),
+                  showCountBadges: true,
+                  showDarkOverlay: false,
+                ),
+              ),
+            DisplayMode.descriptiveList => ListView.builder(
+                itemExtent: 176,
+                itemCount: items.length,
+                itemBuilder: (context, index) => MangaCoverDescriptiveListTile(
+                  manga: items[index],
+                  selected: false,
+                  onPressed: () =>
+                      MangaRoute(mangaId: items[index].id).push(context),
+                  onLongPress: () {},
+                  showBadges: true,
+                ),
+              ),
+            DisplayMode.coverOnly => GridView.builder(
+                gridDelegate: gridDelegate(),
+                itemCount: items.length,
+                itemBuilder: (context, index) => MangaCoverGridTile(
+                  manga: items[index],
+                  selected: false,
+                  onLongPress: () {},
+                  onPressed: () =>
+                      MangaRoute(mangaId: items[index].id).push(context),
+                  showCountBadges: true,
+                  showTitle: false,
+                  showDarkOverlay: false,
+                ),
+              ),
+          },
+        );
+      },
+      refresh: () => ref.refresh(libraryMangaListProvider),
     );
   }
 }

@@ -31,13 +31,27 @@ class ShowContinueReadingButton extends _$ShowContinueReadingButton
   bool? build() => initialize(DBKeys.showContinueReadingButton);
 }
 
-// @riverpod
-// class LanguageBadge extends _$LanguageBadge
-//     with SharedPreferenceClient<bool> {
-//   @override
-//   bool? build() => initialize(
-//
-//   key: DBKeys.languageBadge.name,
-//   initial: DBKeys.languageBadge.initial,
-// );
-// }
+@riverpod
+class LanguageBadge extends _$LanguageBadge
+    with SharedPreferenceClientMixin<bool> {
+  @override
+  bool? build() => initialize(DBKeys.languageBadge);
+}
+
+@riverpod
+class UseLangIcon extends _$UseLangIcon with SharedPreferenceClientMixin<bool> {
+  @override
+  bool? build() => initialize(DBKeys.useLangIcon);
+}
+
+@riverpod
+class LocalBadge extends _$LocalBadge with SharedPreferenceClientMixin<bool> {
+  @override
+  bool? build() => initialize(DBKeys.localBadge);
+}
+
+@riverpod
+class SourceBadge extends _$SourceBadge with SharedPreferenceClientMixin<bool> {
+  @override
+  bool? build() => initialize(DBKeys.sourceBadge);
+}

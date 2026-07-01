@@ -14,6 +14,7 @@ import '../../browse_center/domain/source/source_model.dart';
 import '../../browse_center/presentation/source/controller/source_controller.dart';
 import '../../library/presentation/category/controller/edit_category_controller.dart';
 import '../../library/presentation/library/controller/library_controller.dart';
+import '../../library/presentation/library/controller/library_manga_list.dart';
 import '../../manga_book/domain/manga/graphql/__generated__/fragment.graphql.dart';
 import '../../manga_book/domain/manga/manga_model.dart';
 import '../../manga_book/presentation/manga_details/controller/manga_details_controller.dart';
@@ -238,6 +239,9 @@ class MigrationExecution extends _$MigrationExecution {
       ref.invalidate(mangaChapterListProvider(mangaId: fromMangaId));
       ref.invalidate(mangaChapterListProvider(mangaId: toMangaId));
 
+      // Invalidate the full library fetch (source of truth) then the
+      // per-category slices so all reactive descendants re-partition.
+      ref.invalidate(libraryMangaListProvider);
       // Invalidate all category manga lists to refresh library
       final categories = ref.read(categoryControllerProvider).valueOrNull ?? [];
       for (final category in categories) {
